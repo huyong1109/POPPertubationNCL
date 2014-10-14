@@ -1,0 +1,53 @@
+K 25
+svn:wc:ra_dav:version-url
+V 61
+/!svn/ver/56658/validation_testing/trunk/run_CESM/ncl_library
+END
+Zscore.ncl
+K 25
+svn:wc:ra_dav:version-url
+V 72
+/!svn/ver/54862/validation_testing/trunk/run_CESM/ncl_library/Zscore.ncl
+END
+area_avg.ncl
+K 25
+svn:wc:ra_dav:version-url
+V 74
+/!svn/ver/56658/validation_testing/trunk/run_CESM/ncl_library/area_avg.ncl
+END
+vinterp.ncl
+K 25
+svn:wc:ra_dav:version-url
+V 73
+/!svn/ver/54862/validation_testing/trunk/run_CESM/ncl_library/vinterp.ncl
+END
+plot_rmsz.ncl
+K 25
+svn:wc:ra_dav:version-url
+V 75
+/!svn/ver/54862/validation_testing/trunk/run_CESM/ncl_library/plot_rmsz.ncl
+END
+rmsz.ncl
+K 25
+svn:wc:ra_dav:version-url
+V 70
+/!svn/ver/55120/validation_testing/trunk/run_CESM/ncl_library/rmsz.ncl
+END
+print.ncl
+K 25
+svn:wc:ra_dav:version-url
+V 71
+/!svn/ver/54862/validation_testing/trunk/run_CESM/ncl_library/print.ncl
+END
+create_ensemble.ncl
+K 25
+svn:wc:ra_dav:version-url
+V 81
+/!svn/ver/56582/validation_testing/trunk/run_CESM/ncl_library/create_ensemble.ncl
+END
+global.ncl
+K 25
+svn:wc:ra_dav:version-url
+V 72
+/!svn/ver/54862/validation_testing/trunk/run_CESM/ncl_library/global.ncl
+END
