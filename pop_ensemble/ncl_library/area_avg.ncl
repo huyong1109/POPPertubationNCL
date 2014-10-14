@@ -153,4 +153,3 @@ begin
 
   return(array_append_record(GlobalMean3D, GlobalMean2D,0))
 end
-end

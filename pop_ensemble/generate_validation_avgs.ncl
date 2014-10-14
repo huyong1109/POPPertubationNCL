@@ -20,7 +20,7 @@ begin
   if (.not.isdefined("casename")) then
     print((/"ERROR: you must specify the casename of the pop output files !"/))
     print((/"Proper usage:"/))
-    print((/"$ ncl validation-test.ncl pop_out_pre=\"+str_get_dq()+"$PREFIX\"+str_get_dq()/))
+    print((/"$ ncl validation-test.ncl pop_out_pre=\"+str_get_dq()+"$CASENAME\"+str_get_dq()/))
     status_exit(1)
   end if
 
@@ -36,6 +36,14 @@ begin
     print((/"$ ncl validation-test.ncl nfile_opts=\"+str_get_dq()+"$N\"+str_get_dq()/))
     status_exit(1)
   end if
+
+  if (.not.isdefined("defpert")) then
+    print((/"ERROR: you must specify the file describing perturbation file names "/))
+    print((/"$ ncl validation-test.ncl defpert=\"+str_get_dq()+"$DEFPERT\"+str_get_dq()/))
+    status_exit(1)
+  end if
+
+
 
   if (.not.isdefined("tag")) then
     print((/"ERROR: you must specify a tag to use for metadata"/))
@@ -76,9 +84,6 @@ begin
     verbose=False
   end if
 
-  if (.not.isdefined("verbose")) then
-    verbose=False
-  end if
 
   if (isdefined("vinterp")) then
     print((/"WARNING: ignoring your vinterp setting; at this time, we only run the validation test on the native vertical grid."/))
@@ -102,7 +107,7 @@ begin
   ;;;end if
 
   infiles = new(nfiles, string)
-  id_str = asciiread("$NCL_VALID_LIB_DIR/../filesuff.in", -1, "string")
+  id_str = asciiread(defpert, -1, "string")
   do i=0,nfiles-1
     infiles(i) = pop_out_pre+"/"+casename+"."+id_str(i)+"/ocn/hist/"+casename+"."+id_str(i)+"."+pop_out_suf
   end do

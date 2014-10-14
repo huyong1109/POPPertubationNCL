@@ -55,13 +55,57 @@ begin
   else
     one_spatial_dim = False
   end if
-  plev =  vInc3d(vind) = ((dsize(1).eq.nlev).and.(dsize(2).eq.nlat).and.(dsize(3).eq.nlon))
+  plev = dble2flt(f[0]->z_t)
+
+;     (1c) Make sure all files have same dimensions!
+  if (one_spatial_dim) then
+    print((/"Ensuring nlev and ncol match on all files..."/))
+    do i=1,nfiles-1
+      input_dims2 = getfiledimsizes(f[i])
+      if ((input_dims2(ilev).ne.nlev).or.(input_dims2(icol).ne.ncol)) then
+        print((/"ERROR: dimensions differ between "+filelist(0)+" and "+filelist(i)/))
+        status_exit(1)
+      end if
+    end do
+  else
+    print((/"Ensuring nlev, nlat, and nlon match on all files..."/))
+    do i=1,nfiles-1
+      input_dims2 = getfiledimsizes(f[i])
+      if ((input_dims2(ilev).ne.nlev).or.(input_dims2(ilon).ne.nlon).or.(input_dims2(ilat).ne.nlat)) then
+        print((/"ERROR: dimensions differ between "+filelist(0)+" and "+filelist(i)/))
+        status_exit(1)
+      end if
+    end do
+  end if
+
+;     (1d) Determine what variables will be output
+  vNames = getfilevarnames(f[0])
+  vInc2d = new(dimsizes(vNames), logical)
+  vInc3d = new(dimsizes(vNames), logical)
+  str_size = 0
+  print((/"Determining which variables should be included in test..."/))
+  if( isdefined("defvar")) then
+
+    vInc2d(:) = False
+    vInc3d(:) = False
+    vardef= asciiread(defvar, -1, "string")
+  
+    do i=0, dimsizes(vardef)-1
+        vind = ind(vNames .eq. vardef(i)) 
+        ; want variables that are (time, ncol) or (time, lev, ncol)
+        dsize = dimsizes(f[0]->$vNames(vind)$)
+        ddsize = dimsizes(dsize)
+  
+        if (ddsize.eq.3) then
+          vInc2d(vind) = ((dsize(1).eq.nlat).and.(dsize(2).eq.nlon))
         end if
-       ;;; print((/vInc2d(vind),  vInc3d(vind)/))
+        if (ddsize.eq.4) then
+            vInc3d(vind) = ((dsize(1).eq.nlev).and.(dsize(2).eq.nlat).and.(dsize(3).eq.nlon))
+        end if
+        print((/vInc2d(vind),  vInc3d(vind)/))
         if (vInc2d(vind).or.vInc3d(vind)) then
           str_size = max((/str_size, dimsizes(stringtochar(vNames(vind)))/))
         end if
-      end if
       delete(dsize)
       delete(ddsize)
     end do
