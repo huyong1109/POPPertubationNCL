@@ -102,7 +102,7 @@ begin
         if (ddsize.eq.4) then
             vInc3d(vind) = ((dsize(1).eq.nlev).and.(dsize(2).eq.nlat).and.(dsize(3).eq.nlon))
         end if
-        print((/vInc2d(vind),  vInc3d(vind)/))
+        ;print((/vInc2d(vind),  vInc3d(vind)/))
         if (vInc2d(vind).or.vInc3d(vind)) then
           str_size = max((/str_size, dimsizes(stringtochar(vNames(vind)))/))
         end if
@@ -166,7 +166,7 @@ begin
 
   ; (2) Form ensembles, each missing one member; compute RMSZs and global means
   ;     for each variable
-  output_every = 20
+  output_every = 2
   print((/"Forming ensemble..."/))
   indices=ispan(0,nfiles-1,1)
   if (one_spatial_dim) then
@@ -214,9 +214,9 @@ begin
   global_mean_3d = new((/nvars3d, nfiles/), float)
   global_mean_2d = new((/nvars2d, nfiles/), float)
   if (one_spatial_dim) then
-    area_wgt = f[0]->UAREA/sum(f[0]->UAREA) ; Note: vector of length ncol
+    area_wgt = f[0]->TAREA/sum(f[0]->TAREA) ; Note: vector of length ncol
   else
-    area_wgt = f[0]->UAREA   ; Note: vector of length nlat
+    area_wgt = f[0]->TAREA   ; Note: vector of length nlat
   end if
 
 ;     (2a) 3D variables

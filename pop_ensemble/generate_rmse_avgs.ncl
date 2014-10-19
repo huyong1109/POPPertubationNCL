@@ -1,4 +1,4 @@
-load "$NCL_VALID_LIB_DIR/create_ensemble.ncl"
+load "$NCL_VALID_LIB_DIR/diff.ncl"
 
 begin
 
@@ -17,19 +17,13 @@ begin
     status_exit(1)
   end if
 
-  if (.not.isdefined("casename")) then
-    print((/"ERROR: you must specify the casename of the pop output files !"/))
+  if (.not.isdefined("casename") .or. .not.isdefined("casename1")) then
+    print((/"ERROR: you must specify the casename1 of the pop output files !"/))
     print((/"Proper usage:"/))
     print((/"$ ncl validation-test.ncl pop_out_pre=\"+str_get_dq()+"$CASENAME\"+str_get_dq()/))
     status_exit(1)
   end if
 
-  if (.not.isdefined("pop_out_suf")) then
-    print((/"ERROR: you must specify the suffix of the pop output files (start with pop.h#)!"/))
-    print((/"Proper usage:"/))
-    print((/"$ ncl validation-test.ncl pop_out_suf=\"+str_get_dq()+"$SUFFIX\"+str_get_dq()/))
-    status_exit(1)
-  end if
 
   if (.not.isdefined("nfile_opts")) then
     print((/"ERROR: you must specify the number of files to use to build ensemble"/))
@@ -85,11 +79,6 @@ begin
   end if
 
 
-  if (isdefined("vinterp")) then
-    print((/"WARNING: ignoring your vinterp setting; at this time, we only run the validation test on the native vertical grid."/))
-    delete(vinterp)
-  end if
-  vinterp=False
 
   do ifile=0, dimsizes(nfile_opts)-1
 
@@ -105,22 +94,28 @@ begin
   ;;;  halfway = (nfiles-1)/2
   ;;;  nfile_ids(halfway+1:nfiles-1) = nfile_ids(halfway+1:nfiles-1)+(50-halfway)
   ;;;end if
-
-  infiles = new(nfiles, string)
+  
+  nfile = new(nfiles, string)
+  ofile = new(nfiles, string)
   id_str = asciiread(defpert, -1, "string")
   do i=0,nfiles-1
-    infiles(i) = pop_out_pre+"/"+casename+"."+id_str(i)+"/ocn/hist/"+casename+"."+id_str(i)+"."+pop_out_suf
+    nfile(i) = pop_out_pre+"/"+"/ocn/hist/"+casename+id_str(i)+".nc"
+    ofile(i) = pop_out_pre1+"/"+"/ocn/hist/"+casename1+id_str(i)+".nc"
   end do
   delete(nfile_ids)
 
 
 
 
-  print((/"Ensemble files:"/))
+  print((/"New files:"/))
   print((/"---------------"/))
-  print((/infiles/))
+  print((/nfile/))
+  print((/"Orig files:"/))
+  print((/"---------------"/))
+  print((/ofile/))
 
-  status = create_ensemble(infiles, ensemble_file, tag, compset, res, mach, tind, vinterp, verbose)
-  delete(infiles)
+  status = diff(nfile,ofile,  ensemble_file, tag, compset, res, mach, tind, verbose)
+  delete(nfile)
+  delete(ofile)
   end do
 end

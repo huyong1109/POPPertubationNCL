@@ -11,15 +11,7 @@ setenv CASE_PFX perturb.TS.g40.year
 setenv OCASE $CASEROOT/$CASE_PFX
 
 
-set bcsh=perturb_g40_TS_year
-foreach pert (12 10 8 6 4 )
-    #set newbcsh=bcsh.$pert
-    #cp ./$bcsh.csh ./$newbcsh.csh
-    #
-
-    #sed -i "s/perturb.g40.TS.year_14/perturb.g40.TS.year_$pert/g" ./$newbcsh.csh
-    #sed -i "s/init_ts_perturb = 1.0e-14/init_ts_perturb = 1.0e-$pert/g" ./$newbcsh.csh
-    #./newbcsh.$pert.csh
+foreach pert (12 10 8 6 4 2)
 
     set CASE1_NAME=$CASE_PFX.$pert
     set CASE1=$CASEROOT/$CASE1_NAME

@@ -35,12 +35,16 @@ while [ $# -gt 0 ]; do
       ROOT_DIR=$2
       shift
     ;;
+    -pop_out1 )
+      ROOT_DIR1=$2
+      shift
+    ;;
     -casename )
       CASENAME=$2
       shift
     ;;
-    -casesuffix )
-      CASESUFFIX=$2
+    -casename1 )
+      CASENAME1=$2
       shift
     ;;
     -compset )
@@ -97,7 +101,7 @@ if [ -z $OUT_FILE ]; then
   usage
   exit 1
 fi
-if [ -z $ROOT_DIR ] || [ -z $CASENAME ] || [ -z $CASESUFFIX ]; then
+if [ -z $ROOT_DIR ] || [ -z $CASENAME ] ; then
   echo "ERROR: you must provide the root case name and suffix."
   usage
   exit 1
@@ -116,9 +120,9 @@ if [ $NFILES -lt $NENS ]; then
 fi
 
 ThisDir=$( cd `dirname $0`; pwd -P )
-NCLSCRIPT=$ThisDir/generate_validation_avgs.ncl
+NCLSCRIPT=$ThisDir/generate_rmse_avgs.ncl
 
 export NCL_VALID_LIB_DIR=$( cd $ThisDir/ncl_library; pwd -P )
-COMMAND="ncl $NCLSCRIPT ensemble_file=\"${OUT_DIR}/${OUT_FILE}\" pop_out_pre=\"$ROOT_DIR\" casename=\"$CASENAME\" pop_out_suf=\"$CASESUFFIX\" tag=\"$TAG\" nfile_opts=$NENS defpert=\"$ThisDir/$DEFPERT\"  defvar=\"$ThisDir/$DEFVAR\" res=\"$RES\" compset=\"$COMPSET\" mach=\"$MACH\" $MONTHLY $VERBOSE "
+COMMAND="ncl $NCLSCRIPT ensemble_file=\"${OUT_DIR}/${OUT_FILE}\" pop_out_pre=\"$ROOT_DIR\" pop_out_pre1=\"$ROOT_DIR1\" casename=\"$CASENAME\" casename1=\"$CASENAME1\"  tag=\"$TAG\" nfile_opts=$NENS defpert=\"$ThisDir/$DEFPERT\"  defvar=\"$ThisDir/$DEFVAR\" res=\"$RES\" compset=\"$COMPSET\" mach=\"$MACH\" $MONTHLY $VERBOSE "
 echo "$COMMAND"
 $COMMAND

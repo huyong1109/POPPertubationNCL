@@ -11,7 +11,6 @@ setenv CASE_PFX perturb.g40.T.year
 setenv OCASE $CASEROOT/$CASE_PFX
 
 
-set bcsh=perturb_g40_T_year
 foreach pert (12 10 8 6 4 2)
 
     set CASE1_NAME=$CASE_PFX.$pert
@@ -36,6 +35,7 @@ foreach pert (12 10 8 6 4 2)
 
 
     # Change pertlim in clone
+
     echo "init_ts_perturb = 1.0e-$pert"   >> user_nl_pop2
     ./preview_namelists
 
