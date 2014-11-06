@@ -77,13 +77,8 @@ begin
   else
     ; specify which variables to check against ensemble here
     ; (ignored if UseAllVars = True)
-;    var3d = (/"Q", "T", "U"/)
-;    var3d = (/"ABSORB", "CCN3"/)
-    var3d = (/"CLDICE", "CLDLIQ", "CLOUD", "DCQ", "DTCOND", "DTV", "FICE", "ICIMR", "ICWMR", "OMEGA", "OMEGAT", "Q", "QRL", "QRS", "RELHUM", "T", "U", "UU", "V", "VD01", "VQ", "VT", "VU", "VV", "Z3"/)
-;    var2d = (/"PS", "TS"/)
-;    var2d = (/"TS"/)
-;    var2d = (/"AEROD_v","AODABS"/)
-    var2d = (/"AEROD_v", "CLDHGH", "CLDLOW", "CLDMED", "CLDTOT", "FLDS", "FLDSC", "FLNS", "FLNSC", "FLNT", "FLNTC", "FLUT", "FLUTC", "FSDS", "FSDSC", "FSDTOA", "FSNS", "FSNSC", "FSNT", "FSNTC", "FSNTOA", "FSNTOAC", "FSUTOA", "ICEFRAC", "LANDFRAC", "LHFLX", "LWCF", "OCNFRAC", "PBLH", "PHIS", "PRECC", "PRECL", "PRECSC", "PRECSL", "PS", "PSL", "QFLX", "QREFHT", "SFCLDICE", "SFCLDLIQ", "SHFLX", "SNOWHICE", "SNOWHLND", "SOLIN", "SWCF", "TAUX", "TAUY", "TGCLDCWP", "TGCLDIWP", "TGCLDLWP", "TMQ", "TREFHT", "TS", "TSMN", "TSMX", "U10"/)
+    var3d = (/"UVEL", "VVEL", "TEMP", "SALT"/)
+    var2d = (/"SSH"/)
   end if
   nvars3d = dimsizes(var3d)
   nvars2d = dimsizes(var2d)
@@ -106,7 +101,7 @@ begin
       print((/"... but not extrapolating to values under the surface."/))
     end if
   else
-    print((/"Comparing data on CAM's native (hybrid) levels."/))
+    print((/"Comparing data on POP's native (hybrid) levels."/))
   end if
   ; FailTest(v)  = True => RMSZ > max(ensemble RMSZ)
   ; FailTest2(v) = True => Global Mean > max(ensemble global mean)

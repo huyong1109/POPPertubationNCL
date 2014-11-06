@@ -11,13 +11,11 @@ setenv CASE_PFX perturb.g40.T.year
 setenv OCASE $CASEROOT/$CASE_PFX
 
 
-#(1 71 51 41 21 91) ! done
-#(11 31 61 81 )
-#(5 15 25 35 45 55 65 75 85 95)
-foreach pert (5)
+
+foreach pert (00 01 41 ) #91
   echo "pert : $pert"
-  if ( $pert == 0 ) then 
-    ptlim=0.0
+  if ( $pert == 00 ) then 
+      set ptlim="0.0"
   else if ( $pert < 51 ) then
       set j=`expr $pert + 9 `
       echo $j
@@ -31,7 +29,7 @@ foreach pert (5)
   endif
   echo $ptlim
 
-  set CASE1_NAME=$CASE_PFX.14.$pert
+  set CASE1_NAME=${CASE_PFX}5.$pert
   set CASE1=$CASEROOT/$CASE1_NAME
   
   # Create clone
@@ -51,6 +49,9 @@ foreach pert (5)
   cd $CASE1
   ./xmlchange -file env_build.xml -id EXEROOT -val $EXEROOT
   ./xmlchange -file env_build.xml -id BUILD_COMPLETE -val TRUE
+  # five years run
+  ./xmlchange -file env_run.xml -id STOP_OPTION -val nyears
+  ./xmlchange -file env_run.xml -id STOP_N -val 5
   ./cesm_setup
   
   
@@ -65,8 +66,7 @@ foreach pert (5)
   #CHECK RUN
   sed -i "s/ 4:00/ 6:00/g" $CASE1/*.run
   #sed -i "s/ regular/ premium/g" $CASE1/*.run
-  sed -i "s/ P00000000/ P93300612/g" $CASE1/*.run
-  sed -i "s/ P07010002/ P93300612/g" $CASE1/*.run
+  sed -i "s/ P00000000/ P07010002/g" $CASE1/*.run
   sed -i "s/ptile=15/ptile=16/g" $CASE1/*.run
   
   # Only submit the cloned case if --nosubmit is off

@@ -26,7 +26,7 @@ undef("area_avg_FV")
 function area_avg_FV(data, weight)
 ; Calculate global mean for single level of CAM-FV output 
 begin
-  area2d = (/wgt_areaave2(data, weight, 1)/)
+  area2d = (/wgt_areaave2(data, weight, 0)/)
   if (typeof(area2d).eq."double") then
     return(doubletofloat(area2d))
   else
@@ -57,7 +57,7 @@ begin
   ilon = -1
 
   do i=0,dimsizes(input_dims)-1
-    if (input_dim_names(i).eq."lev") then
+    if (input_dim_names(i).eq."z_t") then
       nlev = input_dims(i)
       ilev = i
     end if
@@ -65,21 +65,21 @@ begin
       ncol = input_dims(i)
       icol = i
     end if
-    if (input_dim_names(i).eq."lat") then
+    if (input_dim_names(i).eq."nlat") then
       nlat = input_dims(i)
       ilat = i
     end if
-    if (input_dim_names(i).eq."lon") then
+    if (input_dim_names(i).eq."nlon") then
       nlon = input_dims(i)
       ilon = i
     end if
   end do
   if (nlev.eq.-1) then
-    print((/"ERROR: can not find nlev dimension in "+filelist(0)/))
+    print((/"ERROR: can not find nlev dimension in "+run_file/))
     status_exit(1)
   end if
   if (((nlon.eq.-1).or.(nlat.eq.-1)).and.(ncol.eq.-1)) then
-    print((/"ERROR: can not find ncol or nlat/nlon dimension in "+filelist(0)/))
+    print((/"ERROR: can not find ncol or nlat/nlon dimension in "+run_file/))
     status_exit(1)
   end if
   if (ncol.ne.-1) then
@@ -93,9 +93,9 @@ begin
 
   ;    (1c) Compute Area weights
   if (one_spatial_dim) then
-    area_wgt = frun->area/sum(frun->area)
+    area_wgt = frun->TAREA/sum(frun->area)
   else
-    area_wgt = frun->gw
+    area_wgt = frun->TAREA
   end if
 
   ; (2) Compute means
@@ -110,7 +110,7 @@ begin
         if (one_spatial_dim) then
           GlobalMean3D_lev(v,k) = area_avg_SE(output(tind, k, :), area_wgt)
         else
-          GlobalMean3D_lev(v,k) = area_avg_FV(output(tind, k, :, :), area_wgt)
+          GlobalMean3D_lev(v,k) = area_avg(output(tind, k, :, :), area_wgt)
         end if
         GlobalMean3D(v) = avg(GlobalMean3D_lev(v,:))
       end do
@@ -124,7 +124,7 @@ begin
       if (one_spatial_dim) then
         GlobalMean2D(v) = area_avg_SE(output(tind, :), area_wgt)
       else
-        GlobalMean2D(v) = area_avg_FV(output(tind, :, :), area_wgt)
+        GlobalMean2D(v) = area_avg(output(tind, :, :), area_wgt)
       end if
       delete(output)
     end if

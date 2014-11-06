@@ -24,7 +24,7 @@ begin
   ilat = -1
   ilon = -1
   do i=0,dimsizes(input_dims)-1
-    if (input_dim_names(i).eq."lev") then
+    if (input_dim_names(i).eq."z_t") then
       nlev = input_dims(i)
       ilev = i
     end if
@@ -32,21 +32,21 @@ begin
       ncol = input_dims(i)
       icol = i
     end if
-    if (input_dim_names(i).eq."lat") then
+    if (input_dim_names(i).eq."nlat") then
       nlat = input_dims(i)
       ilat = i
     end if
-    if (input_dim_names(i).eq."lon") then
+    if (input_dim_names(i).eq."nlon") then
       nlon = input_dims(i)
       ilon = i
     end if
   end do
   if (nlev.eq.-1) then
-    print((/"ERROR: can not find nlev dimension in "+filelist(0)/))
+    print((/"ERROR: can not find nlev dimension in "+run_file/))
     status_exit(1)
   end if
   if (((nlon.eq.-1).or.(nlat.eq.-1)).and.(ncol.eq.-1)) then
-    print((/"ERROR: can not find ncol or nlat/nlon dimension in "+filelist(0)/))
+    print((/"ERROR: can not find ncol or nlat/nlon dimension in "+run_file/))
     status_exit(1)
   end if
   if (ncol.ne.-1) then
@@ -54,7 +54,7 @@ begin
   else
     one_spatial_dim = False
   end if
-  plev = dble2flt(frun->lev)
+  plev = dble2flt(frun->z_t)
 
   nvars3d = dimsizes(var_name3d)
   nvars2d = dimsizes(var_name2d)
