@@ -28,6 +28,7 @@
    use POP_GridHorzMod
    use POP_FieldMod
    use POP_DomainSizeMod
+   use timers
    use domain
    use grid
 
@@ -107,6 +108,12 @@
 !  scalar convergence-related variables
 !
 !-----------------------------------------------------------------------
+   integer (POP_i4), private :: &
+      timer_haloupdate,              &! timer number for step
+      timer_globalsum,        &! timer for baroclinic parts of step
+      timer_lanczos,        &! timer for barotropic part  of step
+      timer_compute     ! timer for barotropic part  of step
+
 
    integer (POP_i4) ::      &
       maxIterations,        &! max number of solver iterations
@@ -825,6 +832,14 @@
          'POP_SolversInit: error deallocating temp mask')
       return
    endif
+
+   call get_timer(timer_haloupdate,'HALOUPDATE',1,distrb_clinic%nprocs)
+   call get_timer(timer_globalsum,'GLOBALSUM',1,distrb_clinic%nprocs)
+   call get_timer(timer_lanczos,'LANCZOS',1,distrb_clinic%nprocs)
+   call get_timer(timer_compute,'COMPUTE',1,distrb_clinic%nprocs)
+
+
+
 
 !-----------------------------------------------------------------------
 !EOC
@@ -1734,6 +1749,7 @@
    save FirstRunCsi
    data FirstRunCsi /0/
 
+   call timer_start(timer_compute)
    errorCode = POP_Success
 
    call POP_DistributionGet(POP_distrbTropic, errorCode, &
@@ -1765,6 +1781,9 @@
       end do 
    endif
 
+
+   call timer_stop(timer_compute)
+   call timer_start(timer_lanczos)
 
    ! initiate u,v !edit by hy used only once!
    if (FirstRunCsi == 0 ) then
@@ -1819,6 +1838,8 @@
     end if
     ! end init u,v
     
+   call timer_stop(timer_lanczos)
+   call timer_start(timer_compute)
     
     csalpha = 2.0_POP_r8/(csu-csv);
     csbeta = (csu+csv)/(csu-csv);
@@ -1858,10 +1879,15 @@
         end do
     
     end do ! block loop
+   !$OMP END PARALLEL DO
+   call timer_stop(timer_compute)
+   call timer_start(timer_haloupdate)
     
     call POP_HaloUpdate(Q, POP_haloTropic, POP_gridHorzLocCenter, &
       POP_fieldKindScalar, errorCode)
+   call timer_stop(timer_haloupdate)
     
+   call timer_start(timer_compute)
     do iblock=1,numBlocks
       do j=1,ny
       do i=1,nx
@@ -1880,6 +1906,7 @@
     end do ! block loop
     
     !$OMP END PARALLEL DO
+   call timer_stop(timer_compute)
     
     !-----------------------------------------------------------------------
     !
@@ -1887,8 +1914,10 @@
     !
     !-----------------------------------------------------------------------
     
+   call timer_start(timer_haloupdate)
     call POP_HaloUpdate(R, POP_haloTropic, POP_gridHorzLocCenter, &
          POP_fieldKindScalar, errorCode)
+   call timer_stop(timer_haloupdate)
     
     if (errorCode /= POP_Success) then
         call POP_ErrorSet(errorCode, &
@@ -1906,6 +1935,7 @@
     
     iterationLoop: do m = 1, maxIterations
     
+    call timer_start(timer_compute)
     csomga = 1.0_POP_r8/(csy-csomga/(4.0_POP_r8*csalpha*csalpha))
 
     !$OMP PARALLEL DO PRIVATE(iblock)
@@ -1950,8 +1980,11 @@
     end do ! block loop
     !$OMP END PARALLEL DO
     
-    call POP_HaloUpdate(R, POP_haloTropic, POP_gridHorzLocCenter, &
+   call timer_stop(timer_compute)
+   call timer_start(timer_haloupdate)
+   call POP_HaloUpdate(R, POP_haloTropic, POP_gridHorzLocCenter, &
          POP_fieldKindScalar, errorCode)
+   call timer_stop(timer_haloupdate)
     
     !-----------------------------------------------------------------------
     !
@@ -1961,9 +1994,11 @@
     
     if (mod(m,convergenceCheckFreq) == 0) then
     
+   call timer_start(timer_globalsum)
         rr = POP_GlobalSum(work0, POP_distrbTropic, &
         POP_gridHorzLocCenter,   &
         errorCode, mMask = mMaskTropic)   ! (r,r)
+   call timer_stop(timer_globalsum)
     
         !if (POP_myTask == POP_masterTask) then 
         !    write(*,*) "iter ", m, "rr = ", rr, convergenceCriterion
@@ -1982,11 +2017,6 @@
     endif
     
     enddo iterationLoop
-
-    !!!! to print iteration number 
-   if (POP_myTask == POP_masterTask) then
-      write(POP_stdout,*) 'numIteration  = ', numIterations
-   endif
     
     rmsResidual = sqrt(rr*residualNorm)
     
@@ -2084,6 +2114,7 @@
 !
 !-----------------------------------------------------------------------
 
+   call timer_start(timer_compute)
    errorCode = POP_Success
 
 
@@ -2152,11 +2183,15 @@
       end do
       end do
    end do ! block loop
-
    !$OMP END PARALLEL DO
+
+   call timer_stop(timer_compute)
+   call timer_start(timer_haloupdate)
 
    call POP_HaloUpdate(R, POP_haloTropic, POP_gridHorzLocCenter, &
                           POP_fieldKindScalar, errorCode)
+   call timer_stop(timer_haloupdate)
+   call timer_start(timer_compute)
 
    if (errorCode /= POP_Success) then
       call POP_ErrorSet(errorCode, &
@@ -2207,9 +2242,12 @@
 
    end do
    !$OMP END PARALLEL DO
+   call timer_stop(timer_compute)
+   call timer_start(timer_haloupdate)
 
    call POP_HaloUpdate(Q, POP_haloTropic, POP_gridHorzLocCenter, &
                           POP_fieldKindScalar, errorCode)
+   call timer_stop(timer_haloupdate)
 
 
    if (errorCode /= POP_Success) then
@@ -2219,11 +2257,14 @@
    endif
 
 
+   call timer_start(timer_globalsum)
    !---- Form dot products
    sumN = POP_GlobalSum(WORKN, POP_distrbTropic,        &
                                POP_gridHorzLocCenter,   &
                                errorCode, mMask = mMaskTropic)
+   call timer_stop(timer_globalsum)
 
+   call timer_start(timer_compute)
 
    if (errorCode /= POP_Success) then
       call POP_ErrorSet(errorCode, &
@@ -2248,6 +2289,7 @@
 
    end do
    !$OMP END PARALLEL DO
+   call timer_stop(timer_compute)
 
 !-----------------------------------------------------------------------
 !
@@ -2263,6 +2305,7 @@
 !
 !-----------------------------------------------------------------------
 
+      call timer_start(timer_compute)
       !$OMP PARALLEL DO PRIVATE(iblock,i,j)
       do iblock=1,numBlocks
 
@@ -2289,9 +2332,12 @@
 
       end do
       !$OMP END PARALLEL DO
+      call timer_stop(timer_compute)
+      call timer_start(timer_haloupdate)
 
       call POP_HaloUpdate(AZ, POP_haloTropic, POP_gridHorzLocCenter, &
                               POP_fieldKindScalar, errorCode)
+      call timer_stop(timer_haloupdate)
 
 
       if (errorCode /= POP_Success) then
@@ -2300,9 +2346,11 @@
          return
       endif
 
+      call timer_start(timer_globalsum)
       sumN = POP_GlobalSum(WORKN, POP_distrbTropic,        &
                                   POP_gridHorzLocCenter,   &
                                   errorCode, mMask = mMaskTropic)
+      call timer_stop(timer_globalsum)
 
 
       if (errorCode /= POP_Success) then
@@ -2324,6 +2372,7 @@
 !     compute next solution and residual
 !
 !-----------------------------------------------------------------------
+      call timer_start(timer_compute)
 
       !$OMP PARALLEL DO PRIVATE(iblock, i,j)
       do iblock=1,numBlocks
@@ -2353,6 +2402,7 @@
          endif
       end do
       !$OMP END PARALLEL DO
+      call timer_stop(timer_compute)
 
 !-----------------------------------------------------------------------
 !
@@ -2363,8 +2413,10 @@
       if (mod(m,convergenceCheckFreq) == 0) then
 
          !--- update ghost cells for next iteration
+        call timer_start(timer_haloupdate)
          call POP_HaloUpdate(R, POP_haloTropic, POP_gridHorzLocCenter, &
                                 POP_fieldKindScalar, errorCode)
+        call timer_stop(timer_haloupdate)
 
          if (errorCode /= POP_Success) then
             call POP_ErrorSet(errorCode, &
@@ -2372,13 +2424,15 @@
             return
          endif
 
+        call timer_start(timer_globalsum)
          !--- residual norm for convergence 
          rr = POP_GlobalSum(work0, POP_distrbTropic,        &! (r,r)
                                    POP_gridHorzLocCenter,   &
                                    errorCode, mMask = mMaskTropic)
-	     !if (POP_myTask == POP_masterTask) then
-   	     !   write(POP_stdout,*) 'm = ', m, 'rr = ', rr
-   	     !endif
+        call timer_stop(timer_globalsum)
+        !if (POP_myTask == POP_masterTask) then
+        !   write(POP_stdout,*) 'm = ', m, 'rr = ', rr
+        !endif
 
 
          if (errorCode /= POP_Success) then
@@ -2395,11 +2449,6 @@
       endif
 
    end do iterationLoop
-
-    !!!! to print iteration number 
-   if (POP_myTask == POP_masterTask) then
-      write(POP_stdout,*) 'numIteration  = ', numIterations
-   endif
 
    rmsResidual = sqrt(rr*residualNorm)
 

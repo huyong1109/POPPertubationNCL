@@ -1982,11 +1982,6 @@
     endif
     
     enddo iterationLoop
-
-    !!!! to print iteration number 
-   if (POP_myTask == POP_masterTask) then
-      write(POP_stdout,*) 'numIteration  = ', numIterations
-   endif
     
     rmsResidual = sqrt(rr*residualNorm)
     
@@ -2395,11 +2390,6 @@
       endif
 
    end do iterationLoop
-
-    !!!! to print iteration number 
-   if (POP_myTask == POP_masterTask) then
-      write(POP_stdout,*) 'numIteration  = ', numIterations
-   endif
 
    rmsResidual = sqrt(rr*residualNorm)
 
