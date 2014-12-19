@@ -523,7 +523,7 @@
    endif
 
 !  call POP_ConfigRead(configUnit, 'solvers', 'convergenceCheckFreq', &
-   call POP_ConfigRead(configUnit, 'solvers', 'Lanczos', &
+   call POP_ConfigRead(configUnit, 'solvers', 'lanczos', &
                        LanczosStep, 20, errorCode,           &
                        outStringBefore = 'Lanczos step ',  &
                        outStringAfter  = ' iterations')
@@ -1588,6 +1588,7 @@
         end do
         end do
    end do 
+   !$OMP END PARALLEL DO
 
    call POP_HaloUpdate(R, POP_haloTropic, POP_gridHorzLocCenter, &
         POP_fieldKindScalar, errorCode)
@@ -1730,6 +1731,7 @@
    !-----------------------------------------------------------------------
 
    !if (mod(m,convergenceCheckFreq) == 0) then
+   !$OMP PARALLEL DO PRIVATE(iblock,i,j)
    do iblock=1,numBlocks
         do j=1,ny
         do i=1,nx
@@ -1737,6 +1739,7 @@
         end do 
         end do
    end do ! block loop
+   !$OMP END PARALLEL DO
 
    rr0 = POP_GlobalSum(work0, POP_distrbTropic, &
          POP_gridHorzLocCenter,   &
@@ -1758,6 +1761,7 @@
    elseif (m < maxIterations ) then 
        csomga = 1.0_POP_r8/(csgamma - csomga/(4.0_POP_r8*csalpha*csalpha))
 
+        !$OMP PARALLEL DO PRIVATE(iblock)
        do iblock=1,numBlocks
             if (usePreconditioner) then
                 call preconditioner(work1,R,iblock)
@@ -1796,6 +1800,7 @@
             POP_fieldKindScalar, errorCode)
 
 
+        !$OMP PARALLEL DO PRIVATE(iblock)
        do iblock=1,numBlocks
             do j=1,ny
             do i=1,nx
@@ -1803,6 +1808,7 @@
             end do 
             end do
        end do ! block loop
+       !$OMP END PARALLEL DO
 
        rr = POP_GlobalSum(work0, POP_distrbTropic, &
             POP_gridHorzLocCenter,   &
@@ -1938,6 +1944,7 @@
    if (.not. usePreconditioner) then
    
       !--- diagonal preconditioner if preconditioner not specified
+      !$OMP PARALLEL DO PRIVATE(iblock)
       do iblock=1,numBlocks
          do j=1,ny
          do i=1,nx
@@ -1949,6 +1956,7 @@
          end do
          end do
       end do 
+      !$OMP END PARALLEL DO
    endif
 
 
@@ -2034,6 +2042,7 @@
    call timer_stop(timer_compute)
    call timer_start(timer_precond)
 
+    !$OMP PARALLEL DO PRIVATE(iblock,i,j)
     do iblock=1,numBlocks
         if (usePreconditioner) then
             call preconditioner(work1,R,iblock)
@@ -2068,6 +2077,7 @@
    call timer_stop(timer_haloupdate)
    call timer_start(timer_compute)
 
+    !$OMP PARALLEL DO PRIVATE(iblock,i,j)
     do iblock=1,numBlocks
       do j=1,ny
       do i=1,nx
@@ -2135,6 +2145,7 @@
           end do
       endif 
     end do ! block loop
+    !$OMP END PARALLEL DO
   
     call timer_stop(timer_precond)
 
@@ -2147,6 +2158,7 @@
 
     call timer_start(timer_compute)
 
+    !$OMP PARALLEL DO PRIVATE(iblock)
     do iblock=1,numBlocks
     
       do j=1,ny
@@ -2176,14 +2188,7 @@
     
    call timer_stop(timer_compute)
    
-   if (POP_myTask == POP_masterTask) then 
-       write(POP_stdout,*) "usePreconditioner ", usePreconditioner
-       write(POP_stdout,*) "mod(iter,1) ", mod(m,1)
-   endif 
-   if ((.not. usePreconditioner) .and. (mod(m,1) == 1) ) then
-      if (POP_myTask == POP_masterTask) then 
-          write(POP_stdout,*) "update R @iter ", m
-      endif 
+   if (.not. usePreconditioner) then
       
       call timer_start(timer_haloupdate)
         ! halo updating every two iterations 
