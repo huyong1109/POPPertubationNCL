@@ -217,6 +217,7 @@ begin
     area_wgt = f[0]->TAREA/sum(f[0]->TAREA) ; Note: vector of length ncol
   else
     area_wgt = f[0]->TAREA   ; Note: vector of length nlat
+    depth_wgt = f[0]->dz   ; Note: vector of length nlat
   end if
 
 ;     (2a) 3D variables
@@ -284,7 +285,8 @@ begin
           print((/"WARNING: no variance in "+var_name3d(v)/))
         end if
         ; Note: this should be a pressure-weighted average, not a straight average!
-        global_mean_3d(v,n) = avg(global_mean_lev_3d(v,n,:))
+        ; For POP depth information utilized here.
+        global_mean_3d(v,n) = dim_avg_wgt(global_mean_lev_3d(v,n,:),depth_wgt,1)
 
       end do ; n-loop
 

@@ -10,32 +10,33 @@ pertname=(/"csi", "origin", "tol.10", "tol.11", "tol.12", "tol.14", "tol.16", "E
 ntime = dimsizes(time)
 nvars = dimsizes(vars)
 npert = dimsizes(pert)
+pref  ="./validation/validationtest-"
+suf  ="-41cases.log "
 y = new((/nvars,npert+2,ntime/),"float")
   do m = 0,ntime-1
   do n =0,nvars-1
   do k =0,npert-1
-  cmd = "grep '"+vars(n)+": RMSZ score '  ./validation/validationtest-"+time(m)+"-"+pert(k)+".log |awk '{print $6}'"
-  cmd = "grep '"+vars(n)+": RMSZ score '  ./validation/validationtest-"+time(m)+"-"+pert(k)+".log |awk '{print $6}'"
+  cmd = "grep '"+vars(n)+": RMSZ score '  "+pref+time(m)+"-"+pert(k)+suf+" |awk '{print $6}'"
   y(n,k,m) = stringtofloat(systemfunc(cmd))
   end do
-  if(n .ne. nvars-1)  then
-  cmd = "grep '"+vars(n)+" (RMSZ): min'  ./validation/validationtest-"+time(m)+"-"+pert(0)+".log |awk '{print $6}'"
+  ;if(n .ne. nvars-1)  then
+  cmd = "grep '"+vars(n)+" (RMSZ): min'  "+pref+time(m)+"-"+pert(0)+suf+" |awk '{print $6}'"
   y(n,npert,m) = stringtofloat(systemfunc(cmd))
   ;print((/y(n,npert,m)/))
-  cmd = "grep '"+vars(n)+" (RMSZ): min'  ./validation/validationtest-"+time(m)+"-"+pert(0)+".log |awk '{print $12}'"
+  cmd = "grep '"+vars(n)+" (RMSZ): min'  "+pref+time(m)+"-"+pert(0)+suf+"|awk '{print $12}'"
   ;print(cmd)
   y(n,npert+1,m) = stringtofloat(systemfunc(cmd))
   ;print((/y(n,npert+1,m)/))
-  else 
-  cmd = "grep '"+vars(n)+": min'  ./validation/validationtest-"+time(m)+"-"+pert(0)+".log |awk '{print $5}'"
-  ;print(cmd)
-  y(n,npert,m) = stringtofloat(systemfunc(cmd))
-  ;print((/y(n,npert,m)/))
-  cmd = "grep '"+vars(n)+": min'  ./validation/validationtest-"+time(m)+"-"+pert(0)+".log |awk '{print $11}'"
-  ;print(cmd)
-  y(n,npert+1,m) = stringtofloat(systemfunc(cmd))
-  ;print((/y(n,npert+1,m)/))
-    end if
+  ;else 
+  ;cmd = "grep '"+vars(n)+": min'  "+pref+time(m)+"-"+pert(0)+suf+" |awk '{print $5}'"
+  ;;print(cmd)
+  ;y(n,npert,m) = stringtofloat(systemfunc(cmd))
+  ;;print((/y(n,npert,m)/))
+  ;cmd = "grep '"+vars(n)+": min'  "+pref+time(m)+"-"+pert(0)+suf+"|awk '{print $11}'"
+  ;;print(cmd)
+  ;y(n,npert+1,m) = stringtofloat(systemfunc(cmd))
+  ;;print((/y(n,npert+1,m)/))
+  ;  end if
   end do
   end do
 
@@ -50,17 +51,18 @@ do i = 0, nvars-1
 ;************************************************
 ; plotting parameters
 ;************************************************
-wks   = gsn_open_wks ("png",vars(i)+"-RMSZ")                  ; open workstation
+wks   = gsn_open_wks ("png",vars(i)+"-RMSZ-ensemble41-month-tol")                  ; open workstation
 gsn_define_colormap(wks,"amwg")
 
 res                   = True                      ; plot mods desired
-res@tiMainString      = ""        ; add title
 
 ; note a similiar resource is xyLineThicknessF, which will effect all
 ; the lines in the array.
-res@xyLineThicknesses = (/3.0,3.0,3.0,3.0,3.0,3.0,3.0,4.0,4.0/)               ; make 2nd lines thicker
+res@xyLineThicknesses = (/4.0,4.0,4.0,4.0,4.0,4.0,4.0,8.0,8.0/)               ; make 2nd lines thicker
 
-res@xyLineColors      = ispan(1,20*(npert+2),20)          ; change line color
+res@xyLineColors      = ispan(1,10*(npert+2),10)          ; change line color
+res@xyMarkers      = ispan(1,npert+2,1)          ; change line color
+res@xyMarkerSizeF      = 0.3
 res@xyYStyle = "Log"
 res@tiXAxisString     = "Month"         ; change line color
 res@tiYAxisString     = "RMSZ"         ; change line color

@@ -50,7 +50,7 @@ do i = 0, nvars-1
 ;************************************************
 ; plotting parameters
 ;************************************************
-wks   = gsn_open_wks ("png",vars(i)+"-RMSZ-day-tol")                  ; open workstation
+wks   = gsn_open_wks ("png",vars(i)+"-RMSZ-15days-tol")                  ; open workstation
 gsn_define_colormap(wks,"amwg")
 
 res                   = True                      ; plot mods desired
@@ -58,7 +58,7 @@ res@tiMainString      = ""        ; add title
 
 ; note a similiar resource is xyLineThicknessF, which will effect all
 ; the lines in the array.
-res@xyLineThicknesses = (/3.0,3.0,3.0,3.0,3.0,3.0,3.0,4.0,4.0/)               ; make 2nd lines thicker
+res@xyLineThicknesses = (/4.0,4.0,4.0,4.0,4.0,4.0,4.0,8.0,8.0/)               ; make 2nd lines thicker
 
 res@xyLineColors      = ispan(1,20*(npert+2),20)          ; change line color
 res@xyYStyle = "Log"

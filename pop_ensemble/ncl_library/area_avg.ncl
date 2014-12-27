@@ -96,6 +96,7 @@ begin
     area_wgt = frun->TAREA/sum(frun->area)
   else
     area_wgt = frun->TAREA
+    z_wgt = dble2flt(frun->dz)   ; Note: vector of length nlat
   end if
 
   ; (2) Compute means
@@ -112,7 +113,7 @@ begin
         else
           GlobalMean3D_lev(v,k) = area_avg(output(tind, k, :, :), area_wgt)
         end if
-        GlobalMean3D(v) = avg(GlobalMean3D_lev(v,:))
+        GlobalMean3D(v) = dim_avg_wgt(GlobalMean3D_lev(v,:),z_wgt,1)
       end do
       delete(output)
     end if

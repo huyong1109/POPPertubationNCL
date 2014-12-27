@@ -1,4 +1,4 @@
-load "$NCL_VALID_LIB_DIR/rmsz.ncl"
+load "$NCL_VALID_LIB_DIR/rmsz_latitude.ncl"
 load "$NCL_VALID_LIB_DIR/area_avg.ncl"
 load "$NCL_VALID_LIB_DIR/global.ncl"
 load "$NCL_VALID_LIB_DIR/plot_rmsz.ncl"
@@ -114,7 +114,7 @@ begin
   FailTest2 = False
   VarInEns  = True
 
-  RMSZScore = calculate_rmsz_score(run_file, ens_file, var3d, var2d, tind, vinterp, FailTest, VarInEns, verbose)
+  RMSZScore = calculate_rmsz_score_lat(run_file, ens_file, var3d, var2d, tind, vinterp, FailTest, VarInEns, verbose)
   if (HaveGlobalMeans) then
     GlobalMean = calculate_global_mean(run_file, ens_file, var3d, var2d, tind, vinterp, FailTest2, VarInEns, verbose)
   end if
@@ -132,20 +132,12 @@ begin
     if (VarInEns(v)) then
       v_in_f = ind(chartostring(fens->vars).eq.vars(v))
       if (verbose) then
-        print(vars(v)+" (RMSZ): min = "+min(fens->RMSZ(v_in_f,:))+", mean = "+avg(fens->RMSZ(v_in_f,:))+", max = "+max(fens->RMSZ(v_in_f,:)))
-        print((/var3d(i)+": RMSZ score = " + RMSZScore(v)/))
-        if (HaveGlobalMeans) then
-          print(vars(v)+" (global mean): min = "+min(fens->global_mean(v_in_f,:))+", mean = "+avg(fens->global_mean(v_in_f,:))+", max = "+max(fens->global_mean(v_in_f,:)))
-          print((/var3d(i)+": Global mean = " + GlobalMean(v)/))
-        end if
+        print((/var3d(i)+": RMSZ score = " + RMSZScore(v,:)/))
         print((/"----"/))
       end if
-      if (HaveGlobalMeans) then
-        min_avg(v) = min(fens->global_mean(v_in_f,:))
-        max_avg(v) = max(fens->global_mean(v_in_f,:))
-      end if
-      max_z(v)   = max(fens->RMSZ(v_in_f,:))
       var_count = var_count + 1
+
+      max_z(v) = 1.
     else
       max_z(v) = 0.
     end if
@@ -156,51 +148,15 @@ begin
     if (VarInEns(v)) then
       v_in_f = ind(chartostring(fens->vars).eq.vars(v))
       if (verbose) then
-        print(vars(v)+" (RMSZ): min = "+min(fens->RMSZ(v_in_f,:))+", mean = "+avg(fens->RMSZ(v_in_f,:))+", max = "+max(fens->RMSZ(v_in_f,:)))
-        print((/var2d(i)+": RMSZ score = " + RMSZScore(v)/))
-        if (HaveGlobalMeans) then
-          print(vars(v)+" (global mean): min = "+min(fens->global_mean(v_in_f,:))+", mean = "+avg(fens->global_mean(v_in_f,:))+", max = "+max(fens->global_mean(v_in_f,:)))
-          print((/var2d(i)+": Global mean = " + GlobalMean(v)/))
-        end if
+        print((/var2d(i)+": RMSZ score = " + RMSZScore(v,:)/))
         print((/"----"/))
       end if
-      if (HaveGlobalMeans) then
-        min_avg(v) = min(fens->global_mean(v_in_f,:))
-        max_avg(v) = max(fens->global_mean(v_in_f,:))
-      end if
-      max_z(v)   = max(fens->RMSZ(v_in_f,:))
+      max_z(v)   = 1.
       var_count = var_count + 1
     else
       max_z(v) = 0.
     end if
     v = v+1
   end do
-  ; (4) List any vars that failed
-  ;     (4a) RMSZ
-  if (any(FailTest)) then
-    print((/num(FailTest)+" of "+ var_count +" variables failed RMSZ test: "/))
-    print((/"---"/))
-    badvars = ind(FailTest)
-    print((/"* "+vars(badvars)+" ("+RMSZScore(badvars)+" > "+ max_z(badvars)+")"/))
-    delete(badvars)
-  else
-    print((/"0 of "+var_count+" variables failed RMSZ test!"/))
-  end if
-
-  if (HaveGlobalMeans) then
-    if (verbose) then
-      print((/""/))
-    end if
-  ;     (4b) Global Mean
-    if (any(FailTest2)) then
-      print((/num(FailTest2)+" of "+ var_count +" variables failed global mean test: "/))
-      print((/"---"/))
-      badvars = ind(FailTest2)
-      print((/" * "+vars(badvars)+" ("+GlobalMean(badvars)+" outside of ["+ min_avg(badvars)+", "+max_avg(badvars)+"])"/))
-      delete(badvars)
-    else
-      print((/"0 of "+var_count+" variables failed global mean test!"/))
-    end if
-  end if
 
 end

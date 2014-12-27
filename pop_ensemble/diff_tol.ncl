@@ -88,7 +88,7 @@ do ivar = 0, nvars-1
 print(XT)
 print(funs)
 print((/XT(ivar)+"_"+funs(ifun)/))
-wks   = gsn_open_wks ("X11",XT(ivar)+"_"+funs(ifun))                  ; open workstation
+wks   = gsn_open_wks ("png",XT(ivar)+"_"+funs(ifun))                  ; open workstation
 
 res                   = True                      ; plot mods desired
 res@tiMainString      = ""        ; add title

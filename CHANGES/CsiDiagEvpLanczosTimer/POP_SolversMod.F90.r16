@@ -62,7 +62,7 @@
    real (POP_r8), dimension (:,:,:), allocatable, public :: & 
       centerWgtClinicIndep, &! time indep  center wgt on clinic distrb
       centerWgtClinic        ! time depend center wgt on clinic distrb  
-   real (POP_r8), dimension (:,:,:,:,:), allocatable, public :: & 
+   real (POP_r16), dimension (:,:,:,:,:), allocatable, public :: & 
       rinv! EVP pre
 
 !EOP
@@ -1588,7 +1588,6 @@
         end do
         end do
    end do 
-   !$OMP END PARALLEL DO
 
    call POP_HaloUpdate(R, POP_haloTropic, POP_gridHorzLocCenter, &
         POP_fieldKindScalar, errorCode)
@@ -1731,7 +1730,6 @@
    !-----------------------------------------------------------------------
 
    !if (mod(m,convergenceCheckFreq) == 0) then
-   !$OMP PARALLEL DO PRIVATE(iblock,i,j)
    do iblock=1,numBlocks
         do j=1,ny
         do i=1,nx
@@ -1739,7 +1737,6 @@
         end do 
         end do
    end do ! block loop
-   !$OMP END PARALLEL DO
 
    rr0 = POP_GlobalSum(work0, POP_distrbTropic, &
          POP_gridHorzLocCenter,   &
@@ -1761,7 +1758,6 @@
    elseif (m < maxIterations ) then 
        csomga = 1.0_POP_r8/(csgamma - csomga/(4.0_POP_r8*csalpha*csalpha))
 
-        !$OMP PARALLEL DO PRIVATE(iblock)
        do iblock=1,numBlocks
             if (usePreconditioner) then
                 call preconditioner(work1,R,iblock)
@@ -1800,7 +1796,6 @@
             POP_fieldKindScalar, errorCode)
 
 
-        !$OMP PARALLEL DO PRIVATE(iblock)
        do iblock=1,numBlocks
             do j=1,ny
             do i=1,nx
@@ -1808,7 +1803,6 @@
             end do 
             end do
        end do ! block loop
-       !$OMP END PARALLEL DO
 
        rr = POP_GlobalSum(work0, POP_distrbTropic, &
             POP_gridHorzLocCenter,   &
@@ -1944,7 +1938,6 @@
    if (.not. usePreconditioner) then
    
       !--- diagonal preconditioner if preconditioner not specified
-      !$OMP PARALLEL DO PRIVATE(iblock)
       do iblock=1,numBlocks
          do j=1,ny
          do i=1,nx
@@ -1956,7 +1949,6 @@
          end do
          end do
       end do 
-      !$OMP END PARALLEL DO
    endif
 
 
@@ -2042,7 +2034,6 @@
    call timer_stop(timer_compute)
    call timer_start(timer_precond)
 
-    !$OMP PARALLEL DO PRIVATE(iblock,i,j)
     do iblock=1,numBlocks
         if (usePreconditioner) then
             call preconditioner(work1,R,iblock)
@@ -2077,7 +2068,6 @@
    call timer_stop(timer_haloupdate)
    call timer_start(timer_compute)
 
-    !$OMP PARALLEL DO PRIVATE(iblock,i,j)
     do iblock=1,numBlocks
       do j=1,ny
       do i=1,nx
@@ -2145,7 +2135,6 @@
           end do
       endif 
     end do ! block loop
-    !$OMP END PARALLEL DO
   
     call timer_stop(timer_precond)
 
@@ -2158,7 +2147,6 @@
 
     call timer_start(timer_compute)
 
-    !$OMP PARALLEL DO PRIVATE(iblock)
     do iblock=1,numBlocks
     
       do j=1,ny
@@ -2407,10 +2395,9 @@
 !
 !-----------------------------------------------------------------------
 
+   !$OMP PARALLEL DO PRIVATE(iblock,i,j)
 
    call timer_start(timer_precond)
-
-   !$OMP PARALLEL DO PRIVATE(iblock,i,j)
    do iblock=1,numBlocks
 
       !---- calculate (PC)r store in Z
@@ -2425,7 +2412,6 @@
       endif
 
    end do
-   !$OMP END PARALLEL DO
    call timer_stop(timer_precond)
    call timer_start(timer_haloupdate)
 
@@ -2436,8 +2422,6 @@
    call timer_stop(timer_haloupdate)
 
    call timer_start(timer_compute)
-
-   !$OMP PARALLEL DO PRIVATE(iblock,i,j)
    do iblock=1,numBlocks
       !---- Compute intermediate result for dot product
       !---- update conjugate direction vector S
@@ -2537,8 +2521,6 @@
           end do
         endif
       end do
-      !$OMP END PARALLEL DO
-
       call timer_stop(timer_precond)
 
       call timer_start(timer_haloupdate)
@@ -2549,7 +2531,6 @@
       call timer_stop(timer_haloupdate)
       call timer_start(timer_compute)
 
-      !$OMP PARALLEL DO PRIVATE(iblock,i,j)
       do iblock=1,numBlocks
 
         call btropOperator(AZ,Z,iblock)
@@ -2565,7 +2546,6 @@
 
       end do
       !$OMP END PARALLEL DO
-
       call timer_stop(timer_compute)
       call timer_start(timer_haloupdate)
 
@@ -2896,13 +2876,24 @@ subroutine evppre(cc,ns,ew,ne,rinv,landindx,n,m,nn,mm,ndi,mdi,nb,mb)
   integer,intent(in) :: n,m  ! total block size
   integer,intent(in) :: nn,mm  ! small block ideal size
   real(POP_r8),dimension(n,m),intent(in) :: cc,ns,ew,ne
-  real(POP_r8),dimension(nn+mm-1,nn+mm-1,nb*mb),intent(inout):: rinv
+  real(POP_r16),dimension(nn+mm-1,nn+mm-1,nb*mb),intent(inout):: rinv
   integer,dimension(nb,mb),intent(inout):: landindx
   integer,intent(in) :: nb, mb  ! blocks on x and y direction 
   integer,intent(in) :: ndi(nb+1),mdi(mb+1) ! bound index 
+  real(POP_r16),dimension(n,m) :: dcc,dns,dew,dne
 
   ! local 
   integer :: i,j,is,ie,js,je,ln,lm,l
+  
+  do j = 1, m
+    do i = 1, n
+      dcc(i,j) = cc(i,j) 
+      dns(i,j) = ns(i,j) 
+      dew(i,j) = ew(i,j) 
+      dne(i,j) = ne(i,j) 
+    end do 
+  end do 
+
   do i = 1, nb
     is = ndi(i)-1
     ie = ndi(i+1)
@@ -2912,7 +2903,7 @@ subroutine evppre(cc,ns,ew,ne,rinv,landindx,n,m,nn,mm,ndi,mdi,nb,mb)
       je = mdi(j+1) 
       if(minval(abs(ne(is+1:ie-1,js+1:je-1))) == 0.0_POP_r8 ) then 
         landindx(i,j) = 1
-        rinv(:,:,(i-1)*mb+j) = 0.0_POP_r8
+        rinv(:,:,(i-1)*mb+j) = 0.0_POP_r16
       else 
         landindx(i,j) = 0
         lm = (je-js) +1
@@ -2922,7 +2913,7 @@ subroutine evppre(cc,ns,ew,ne,rinv,landindx,n,m,nn,mm,ndi,mdi,nb,mb)
         !  write(POP_stdout,'(a35,5I5)') 'EVP preconditioning subblock ', &
         !        is,ie,js,je,l
         !endif
-        call exppre(cc(is:ie,js:je),ns(is:ie,js:je),ew(is:ie,js:je),ne(is:ie,js:je),rinv(1:l,1:l,(i-1)*mb+j),ln,lm)
+        call exppre(dcc(is:ie,js:je),dns(is:ie,js:je),dew(is:ie,js:je),dne(is:ie,js:je),rinv(1:l,1:l,(i-1)*mb+j),ln,lm)
       end if 
     end do 
   end do 
@@ -2936,18 +2927,31 @@ subroutine evpprecond(cc,ns,ew,ne,rinv,landindx,u,f,n,m,nn,mm,ndi,mdi,nb,mb)
   integer,intent(in) :: n,m  ! total block size
   real(POP_r8),dimension(n,m),intent(in) :: cc,ns,ew,ne,f
   real(POP_r8),dimension(n,m),intent(inout) :: u
-  real(POP_r8),dimension(nn+mm-1,nn+mm-1,nb*mb),intent(in):: rinv
+  real(POP_r16),dimension(nn+mm-1,nn+mm-1,nb*mb),intent(in):: rinv
   integer,dimension(nb,mb),intent(in):: landindx
   integer,intent(in) :: nn,mm  ! small block ideal size
   integer,intent(in) :: nb, mb  ! blocks on x and y direction 
   integer,intent(in) :: ndi(nb+1),mdi(mb+1) ! bound index 
+  real(POP_r16),dimension(n,m) :: dcc,dns,dew,dne,df,du
 
   ! local 
   integer :: i,j,is,ie,js,je,ln,lm,l
-  real(POP_r8),dimension(n,m) :: tu
+  real(POP_r16),dimension(n,m) :: tu
  
+
+  do j = 1, m
+    do i = 1, n
+      dcc(i,j) = cc(i,j) 
+      dns(i,j) = ns(i,j) 
+      dew(i,j) = ew(i,j) 
+      dne(i,j) = ne(i,j) 
+      df(i,j)  =  f(i,j) 
+      du(i,j)  =  u(i,j) 
+    end do 
+  end do 
+
   u = 0.0_POP_r8
-  tu = 0.0_POP_r8 
+  tu = 0.0_POP_r16
   do i = 1, nb
     is = ndi(i) -1
     ie = ndi(i+1) 
@@ -2970,19 +2974,19 @@ subroutine evpprecond(cc,ns,ew,ne,rinv,landindx,u,f,n,m,nn,mm,ndi,mdi,nb,mb)
         end where
 
       else if (landindx(i,j) == 0 ) then 
-        call expevp(cc(is:ie,js:je),ns(is:ie,js:je),ew(is:ie,js:je),ne(is:ie,js:je),rinv(1:l,1:l,(i-1)*mb+j),u(is:ie,js:je),tu(is+1:ie-1,js+1:je-1),f(is:ie,js:je),ln,lm)
+        call expevp(dcc(is:ie,js:je),dns(is:ie,js:je),dew(is:ie,js:je),dne(is:ie,js:je),rinv(1:l,1:l,(i-1)*mb+j),du(is:ie,js:je),tu(is+1:ie-1,js+1:je-1),df(is:ie,js:je),ln,lm)
 
       else 
         write(POP_stdout,'(a35,3I5.3)') 'EVP Error: unpreconditioned block ',i,j,landindx(i,j)
       end if 
     end do 
   end do 
-  do i = 1, nb
-    is = ndi(i) -1
-    ie = ndi(i+1) 
-    do j = 1, mb
-      js = mdi(j)-1 
-      je = mdi(j+1) 
+  do j = 1, mb
+    js = mdi(j)-1 
+    je = mdi(j+1) 
+    do i = 1, nb
+      is = ndi(i) -1
+      ie = ndi(i+1) 
       u(is+1:ie-1,js+1:je-1) = tu(is+1:ie-1,js+1:je-1)
     end do 
   end do 
@@ -2993,23 +2997,23 @@ subroutine evpprecond(cc,ns,ew,ne,rinv,landindx,u,f,n,m,nn,mm,ndi,mdi,nb,mb)
 subroutine exppre(cc,ns,ew,ne,rinv,n,m)
   implicit none
   integer,intent(in) :: n,m
-  real(POP_r8),dimension(n,m),intent(in) :: cc,ns,ew,ne
+  real(POP_r16),dimension(n,m),intent(in) :: cc,ns,ew,ne
 
-  real(POP_r8),dimension(n +m -5,n +m -5),intent(inout) :: rinv
+  real(POP_r16),dimension(n +m -5,n +m -5),intent(inout) :: rinv
 
   !local 
   integer :: i,j,k,ii,info
   integer :: nm 
-  real(POP_r8),dimension(n,m) :: y
-  real(POP_r8),dimension(n +m -5,n +m -5) :: work,ipiv
-  real(POP_r8),dimension(n +m -5,n +m -5) :: rin
-  real(POP_r8),dimension(n +m -5) :: r
+  real(POP_r16),dimension(n,m) :: y
+  real(POP_r16),dimension(n +m -5,n +m -5) :: work,ipiv
+  real(POP_r16),dimension(n +m -5,n +m -5) :: rin
+  real(POP_r16),dimension(n +m -5) :: r
 
   nm = n +m -5
-  y(:,:) = 0.0_POP_r8
+  y(:,:) = 0.0_POP_r16
   ! left 
   do ii = 1,m-2
-    y(2,m-ii) = 1.0_POP_r8
+    y(2,m-ii) = 1.0_POP_r16
     do j = 2, m-1
       do i = 2, n-1
         y(i+1,j+1)  = (- cc(i,j)     * y(i,j )     & 
@@ -3032,11 +3036,11 @@ subroutine exppre(cc,ns,ew,ne,rinv,n,m)
       rinv(ii,n-2+j) = -y(n,m-j)
     end do 
 
-    y(2,m-ii) = 0.0_POP_r8
+    y(2,m-ii) = 0.0_POP_r16
   end do 
   ! buttom
   do ii = 1,n-3
-    y(ii+2,2) = 1.0_POP_r8
+    y(ii+2,2) = 1.0_POP_r16
     do j = 2, m-1
       do i = 2, n-1
         y(i+1,j+1)  = (- cc(i,j)     * y(i,j )     & 
@@ -3059,7 +3063,7 @@ subroutine exppre(cc,ns,ew,ne,rinv,n,m)
       rinv(m-2+ii,n-2+j) = -y(n,m-j)
     end do 
 
-    y(ii+2,2) = 0.0_POP_r8
+    y(ii+2,2) = 0.0_POP_r16
   end do 
 
   rin(:,:) = rinv(:,:)
@@ -3070,7 +3074,7 @@ subroutine exppre(cc,ns,ew,ne,rinv,n,m)
   !write(POP_stdout,'(5f18.5)') rinv(:,:)
 
   !! check pre rinv 
-  rin(:,:) = 0.0_POP_r8
+  rin(:,:) = 0.0_POP_r16
   do j = 1,nm
     do i = 1,nm
       do k = 1,nm
@@ -3094,18 +3098,18 @@ end subroutine
 subroutine expevp(cc,ns,ew,ne,rinv,u,tu,f,n,m)
   implicit none
   integer:: n,m
-  real(POP_r8),dimension(n,m),intent(in) :: cc,ns,ew,ne
-  real(POP_r8),dimension(n,m),intent(in) :: f
-  real(POP_r8),dimension(n,m),intent(in) :: u
-  real(POP_r8),dimension(n-2,m-2),intent(inout) :: tu
+  real(POP_r16),dimension(n,m),intent(in) :: cc,ns,ew,ne
+  real(POP_r16),dimension(n,m),intent(in) :: f
+  real(POP_r16),dimension(n,m),intent(in) :: u
+  real(POP_r16),dimension(n-2,m-2),intent(inout) :: tu
 
-  real(POP_r8),dimension(n+m-5,n+m-5),intent(in) :: rinv
+  real(POP_r16),dimension(n+m-5,n+m-5),intent(in) :: rinv
 
   !local 
   integer :: i,j,k,nm
-  real(POP_r8),dimension(n,m) :: y,ry,ff
-  real(POP_r8),dimension(n+m-5) :: r
-  real(POP_r8) :: rr
+  real(POP_r16),dimension(n,m) :: y,ry,ff
+  real(POP_r16),dimension(n+m-5) :: r
+  real(POP_r16) :: rr
 
   nm = n+m-5
   y(:,:) = u(:,:) 
@@ -3161,7 +3165,7 @@ subroutine expevp(cc,ns,ew,ne,rinv,u,tu,f,n,m)
   y(:,:) = u(:,:)
   y(2:n-1,2:m-1) = tu(1:n-2,1:m-2) 
   
-  rr = 0.0_POP_r8
+  rr = 0.0_POP_r16
 
   do j = 2, m-2
     do i = 2, n-2
@@ -3484,17 +3488,17 @@ subroutine inverse(a,c,n)
   !===========================================================
   implicit none 
   integer,intent(in) ::  n
-  real(POP_r8),intent(inout) :: a(n,n)
-  real(POP_r8),intent(inout) :: c(n,n)
-  real(POP_r8) :: L(n,n), U(n,n), b(n), d(n), x(n)
-  real(POP_r8) :: coeff
+  real(POP_r16),intent(inout) :: a(n,n)
+  real(POP_r16),intent(inout) :: c(n,n)
+  real(POP_r16) :: L(n,n), U(n,n), b(n), d(n), x(n)
+  real(POP_r16) :: coeff
   integer::  i, j, k
 
   ! step 0: initialization for matrices L and U and b
   ! Fortran 90/95 aloows such operations on matrices
-  L=0.0
-  U=0.0
-  b=0.0
+  L=0.0_POP_r16
+  U=0.0_POP_r16
+  b=0.0_POP_r16
 
   ! step 1: forward elimination
   do k=1, n-1
@@ -3512,7 +3516,7 @@ subroutine inverse(a,c,n)
   ! elimination coefficient
   ! + the diagonal elements are 1.0
   do i=1,n
-    L(i,i) = 1.0
+    L(i,i) = 1.0_POP_r16
   end do
   ! U matrix is the upper triangular
   ! part of A
@@ -3526,7 +3530,7 @@ subroutine inverse(a,c,n)
   ! columns of the inverse
   ! matrix C
   do k=1,n
-    b(k)=1.0
+    b(k)=1.0_POP_r16
     d(1) = b(1)
     ! Step 3a: Solve Ld=b using the forward substitution
     do i=2,n
@@ -3548,7 +3552,7 @@ subroutine inverse(a,c,n)
     do  i=1,n
       c(i,k) = x(i)
     end do
-    b(k)=0.0
+    b(k)=0.0_POP_r16
   end do 
 end subroutine
 

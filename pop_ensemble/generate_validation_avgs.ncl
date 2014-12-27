@@ -121,8 +121,8 @@ begin
   print((/"---------------"/))
   print((/infiles/))
 
-  status = create_ensemble(infiles, ensemble_file, tag, compset, res, mach, tind, vinterp, verbose)
-  ;;status = create_meandev(infiles, ensemble_file, tag, compset, res, mach, tind, vinterp, verbose)
+  ;;status = create_ensemble(infiles, ensemble_file, tag, compset, res, mach, tind, vinterp, verbose)
+  status = create_meandev(infiles, ensemble_file, tag, compset, res, mach, tind, vinterp, verbose)
   delete(infiles)
   end do
 end

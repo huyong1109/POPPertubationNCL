@@ -5,13 +5,14 @@ function calc_Z(val, avg, stddev, count, flag)
 ; Calculate Z-score, print warning if standard deviation = 0
 begin
   dims = dimsizes(val)
+  
   return_val = new(dims, float)
   if (all(stddev.le.tol)) then
     if (flag) then
       print((/"WARNING: ALL standard dev = 0"/))
       flag = False
     end if
-    count = count+num(stddev.le.tol)
+    count = count+num(stddev.le.tol)+num(ismissing(stddev))
     return_val = 0.
   else
     if (any(stddev.le.tol)) then
@@ -19,14 +20,12 @@ begin
         print((/"WARNING: some standard dev = 0"/))
         flag = False
       end if
-      count = count+num(stddev.le.tol)
       if (dimsizes(dims).eq.2) then
         ; lat,lon coords instead of ncol coords
         nlat = dims(0)
         nlon = dims(1)
-        ; stddev(ind(ismissing(stddev))) = 0
-        do i=0,nlat-1
-          do j=0,nlon-1
+        do i = 1, nlat -1
+          do j = 0,nlon-1
             if (ismissing(stddev(i,j)) .or. stddev(i,j).le.tol) then
               return_val(i,j) = 0.
             else
@@ -34,6 +33,7 @@ begin
             end if
           end do
         end do
+
       else
         return_val(ind(stddev.le.tol)) = 0.
         inds = ind(stddev.gt.tol)
@@ -42,8 +42,11 @@ begin
     else
       return_val = (val-avg)/stddev
     end if
+   count = count + num(ismissing(stddev))+num(stddev.le.tol)
+   ;print("le.tol " +num(stddev.le.tol))
+   ;print("missing "+ num(ismissing(stddev)))
+   ;print("count " +count)
   end if
-
   return(return_val)
 end
 

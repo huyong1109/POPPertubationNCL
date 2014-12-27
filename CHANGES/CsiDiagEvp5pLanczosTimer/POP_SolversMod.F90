@@ -64,6 +64,8 @@
       centerWgtClinic        ! time depend center wgt on clinic distrb  
    real (POP_r8), dimension (:,:,:,:,:), allocatable, public :: & 
       rinv! EVP pre
+   real (POP_r8), dimension (:,:,:,:), allocatable, public :: & 
+      lcc,lne,ilcc,ilne
 
 !EOP
 !BOC
@@ -143,6 +145,7 @@
 
    integer (POP_i4) ::      &
       maxIterations,        &! max number of solver iterations
+      convergenceCheckStart,        &! max number of solver iterations
       convergenceCheckFreq   ! check convergence every freq steps
 
    real (POP_r8) ::         &
@@ -225,7 +228,7 @@
    integer (POP_i4) :: &
       numBlocks           ! number of processors in barotropic distrib
    integer (POP_i4) :: &
-      bid,i,j,nx1,ny1           ! number of processors in barotropic distrib
+      bid,i,j,nx1,ny1,is,js,ie,je,lm,ln,ib           ! number of processors in barotropic distrib
 
    real (POP_r8), dimension(size(sfcPressure,dim=1), &
                             size(sfcPressure,dim=2), &
@@ -326,11 +329,37 @@
         endif
 
         call timer_start(timer_evpprep)
+
+        lcc(:,:,:,:) = 0.0
+        lne(:,:,:,:) = 0.0
+        ilcc(:,:,:,:) = 0.0
+        ilne(:,:,:,:) = 0.0
         do bid=1,numBlocks
           nx1 = POP_nxBlock-1
           ny1 = POP_nyBlock-1
-          call evppre(btropWgtCenter(2:nx1,2:ny1,bid),btropWgtNorth(2:nx1,2:ny1,bid),btropWgtEast(2:nx1,2:ny1,bid),btropWgtNE(2:nx1,2:ny1,bid),& 
+          call evppre(btropWgtCenter(2:nx1,2:ny1,bid),btropWgtNE(2:nx1,2:ny1,bid),& 
           rinv(:,:,:,bid,EvpPreFlag),landindx(:,:,bid,EvpPreFlag),POP_nxBlock-2,POP_nyBlock-2,EvpXbs,EvpYbs,EvpXbidx,EvpYbidx,EvpXnb,EvpYnb)
+
+          do j = 1, EvpYnb
+            js = EvpYbidx(j) 
+            je = EvpYbidx(j+1) +1
+            lm = (je-js) +1
+            do i = 1, EvpXnb
+              is = EvpXbidx(i) 
+              ie = EvpXbidx(i+1) +1
+              ln = (ie-is) +1
+              ib = (j-1)*EvpXnb+i
+              lcc(1:ln,1:lm,ib,bid) = btropWgtCenter(is:ie,js:je,bid)
+              lne(1:ln,1:lm,ib,bid) = btropWgtNE    (is:ie,js:je,bid)
+            end do 
+          end do 
+          where(lcc(:,:,:,bid) .ne. 0.0) 
+            ilcc(:,:,:,bid) = 1.0_POP_r8/lcc(:,:,:,bid)
+          end where
+          where(lne(:,:,:,bid) .ne. 0.0) 
+            ilne(:,:,:,bid) = 1.0_POP_r8/lne(:,:,:,bid)
+          end where
+
         end do 
         call timer_stop(timer_evpprep)
 
@@ -522,7 +551,6 @@
       return
    endif
 
-!  call POP_ConfigRead(configUnit, 'solvers', 'convergenceCheckFreq', &
    call POP_ConfigRead(configUnit, 'solvers', 'lanczos', &
                        LanczosStep, 20, errorCode,           &
                        outStringBefore = 'Lanczos step ',  &
@@ -531,6 +559,17 @@
    if (errorCode /= POP_Success) then
       call POP_ErrorSet(errorCode, &
          'POP_SolversInit: error reading lanczos step')
+      return
+   endif
+!  call POP_ConfigRead(configUnit, 'solvers', 'convergenceCheckstart', &
+   call POP_ConfigRead(configUnit, 'solvers', 'convergencecheckstart', &
+                       convergenceCheckStart, 60, errorCode,           &
+                       outStringBefore = 'Check convergence start from ',  &
+                       outStringAfter  = ' iterations')
+
+   if (errorCode /= POP_Success) then
+      call POP_ErrorSet(errorCode, &
+         'POP_SolversInit: error reading convergence check start steps')
       return
    endif
 
@@ -616,6 +655,10 @@
       i = EvpXbs + EvpYbs -1
       allocate(rinv (i,i,EvpXnb*EvpYnb,numBlocksTropic,2))
       allocate(landindx(EvpXnb,EvpYnb,numBlocksTropic,2))
+      allocate(lcc (EvpXbs+2,EvpYbs+2,EvpXnb*EvpYnb,numBlocksTropic))
+      allocate(lne (EvpXbs+2,EvpYbs+2,EvpXnb*EvpYnb,numBlocksTropic))
+      allocate(ilcc(EvpXbs+2,EvpYbs+2,EvpXnb*EvpYnb,numBlocksTropic))
+      allocate(ilne(EvpXbs+2,EvpYbs+2,EvpXnb*EvpYnb,numBlocksTropic))
 
    endif
 
@@ -1345,7 +1388,7 @@
          end do
          end do
 
-         if (mod(m,convergenceCheckFreq) == 0) then
+         if ((mod(m,convergenceCheckFreq) == 0) .and. (m .ge.  convergenceCheckStart)) then
 
             call btropOperator(R,X,iblock)
             do j=1,ny
@@ -1365,7 +1408,7 @@
 !
 !-----------------------------------------------------------------------
 
-      if (mod(m,convergenceCheckFreq) == 0) then
+      if ((mod(m,convergenceCheckFreq) == 0) .and. (m .ge.  convergenceCheckStart)) then
 
          call POP_HaloUpdate(R, POP_haloTropic, POP_gridHorzLocCenter, &
                              POP_fieldKindScalar, errorCode)
@@ -2176,7 +2219,7 @@
       end do 
       end do
     
-      if (mod(m,convergenceCheckFreq) == 0) then
+      if ((mod(m,convergenceCheckFreq) == 0) .and. (m .ge.  convergenceCheckStart)) then
           do j=1,ny
           do i=1,nx
           WORK0(i,j,iblock) = R(i,j,iblock)*R(i,j,iblock)
@@ -2203,7 +2246,7 @@
     !
     !-----------------------------------------------------------------------
     
-    if (mod(m,convergenceCheckFreq) == 0) then
+   if ((mod(m,convergenceCheckFreq) == 0) .and. (m .ge.  convergenceCheckStart)) then
     
    call timer_start(timer_globalsum)
         rr = POP_GlobalSum(work0, POP_distrbTropic, &
@@ -2211,9 +2254,6 @@
         errorCode, mMask = mMaskTropic)   ! (r,r)
    call timer_stop(timer_globalsum)
     
-        if (POP_myTask == POP_masterTask) then 
-            write(POP_stdout,*) "iter ", m, "rr = ", rr, convergenceCriterion
-        endif 
         if (errorCode /= POP_Success) then
             call POP_ErrorSet(errorCode, &
             'POP_SolversCSI: error computing convergence dot prod')
@@ -2228,6 +2268,10 @@
     endif
     
     enddo iterationLoop
+
+    if (POP_myTask == POP_masterTask) then 
+        write(POP_stdout,*) "iter ", m, "rr = ", rr
+    endif 
     
     rmsResidual = sqrt(rr*residualNorm)
 
@@ -2621,7 +2665,7 @@
          end do
 
          !--- recompute residual as b-Ax for convergence check
-         if (mod(m,convergenceCheckFreq) == 0) then
+         if ((mod(m,convergenceCheckFreq) == 0) .and. (m .ge.  convergenceCheckStart)) then
 
             !--- Reset residual using r = b - Ax
             !--- (r,r) for norm of residual
@@ -2644,7 +2688,7 @@
 !
 !-----------------------------------------------------------------------
 
-      if (mod(m,convergenceCheckFreq) == 0) then
+      if ((mod(m,convergenceCheckFreq) == 0) .and. (m .ge.  convergenceCheckStart)) then
 
          !--- update ghost cells for next iteration
          call timer_start(timer_haloupdate)
@@ -2665,9 +2709,6 @@
                                    errorCode, mMask = mMaskTropic)
          call timer_stop(timer_globalsum)
 
-         if (POP_myTask == POP_masterTask) then
-            write(POP_stdout,*) 'm = ', m, 'rr = ', rr
-         endif
 
 
          if (errorCode /= POP_Success) then
@@ -2684,6 +2725,10 @@
       endif
 
    end do iterationLoop
+
+   if (POP_myTask == POP_masterTask) then
+      write(POP_stdout,*) 'm = ', m, 'rr = ', rr
+   endif
 
    rmsResidual = sqrt(rr*residualNorm)
 
@@ -2728,6 +2773,7 @@
    real (POP_r8), dimension(:,:,:), intent(out) :: &
       PX                  ! nine point operator result
 
+
 !EOP
 !BOC
 !-----------------------------------------------------------------------
@@ -2735,9 +2781,13 @@
 !  local variables
 !
 !-----------------------------------------------------------------------
+   real (POP_r8), dimension(EvpXbs+2,EvpYbs+2,EvpXnb*EvpYnb):: &
+      u,f                  ! nine point operator result
+   real (POP_r8), dimension(EvpXbs,EvpYbs,EvpXnb*EvpYnb):: &
+      tu
 
    integer (POP_i4) :: &
-      i,j,nx1,ny1               ! dummy counters
+      i,j,js,je,is,ie,lm,ln,l,nx1,ny1,ib               ! dummy counters
 
 !-----------------------------------------------------------------------
 
@@ -2748,19 +2798,51 @@
    !write(POP_stdout,'(a30)') 'EVPPRECOND input'
    !write(POP_stdout,'(5e15.5)') X(:,:,bid)
    
-   call evpprecond(btropWgtCenter(2:nx1,2:ny1,bid),btropWgtNorth(2:nx1,2:ny1,bid),btropWgtEast(2:nx1,2:ny1,bid),btropWgtNE(2:nx1,2:ny1,bid),rinv(:,:,:,bid,EvpTimeStep),landindx(:,:,bid,EvpTimeStep),PX(2:nx1,2:ny1,bid),X(2:nx1,2:ny1,bid),nx1-1,ny1-1,EvpXbs,EvpYbs,EvpXbidx,EvpYbidx,EvpXnb,EvpYnb)
+   !call evpprecond(rinv(:,:,:,bid,EvpTimeStep),landindx(:,:,bid,EvpTimeStep),PX(2:nx1,2:ny1,bid),X(2:nx1,2:ny1,bid),nx1-1,ny1-1,EvpXbs,EvpYbs,EvpXbidx,EvpYbidx,EvpXnb,EvpYnb)
 
-   !write(POP_stdout,'(a30)') 'EVPPRECOND output'
-   !write(POP_stdout,'(5e15.5)') PX(:,:,bid)
-   !do j=1,ny
-   !  do i=1,nx
-   !    if (btropWgtCenter(i,j,bid) /= 0.0_POP_r8) then
-   !      PX(i,j,bid) = X(i,j,bid)/btropWgtCenter(i,j,bid)
-   !    else
-   !      PX(i,j,bid) = 0.0_POP_r8
-   !    endif
-   !  end do 
-   !end do 
+  u = 0.0_POP_r8 
+  tu = 0.0_POP_r8 
+  f = 0.0_POP_r8 
+  do j = 1, EvpYnb
+    js = EvpYbidx(j)
+    je = EvpYbidx(j+1) +1
+    lm = (je-js) +1
+    do i = 1, EvpXnb
+      is = EvpXbidx(i) 
+      ie = EvpXbidx(i+1) +1
+      ln = (ie-is) +1
+      l  = ln + lm -5
+      ib = (j-1)*EvpXnb+i
+      f(2:ln-1,2:lm-1,ib) = X(is+1:ie-1,js+1:je-1,bid)
+      if (landindx(i,j,bid,EvpTimeStep) == 1 ) then 
+        ! diagonal preconditioning for land blocks
+        
+          tu(1:ln-2,1:lm-2,ib) = & 
+                    f(2:ln-1,2:lm-1,ib)*ilcc(2:ln-1,2:lm-1,ib,bid)
+
+      else if (landindx(i,j,bid,EvpTimeStep) == 0 ) then 
+        call expevp(lcc(1:ln,1:lm,ib,bid),lne(1:ln,1:lm,ib,bid),ilne(1:ln,1:lm,ib,bid),rinv(1:l,1:l,ib,bid,EvpTimeStep),u(1:ln,1:lm,ib),tu(1:ln-2,1:lm-2,ib),f(1:ln,1:lm,ib),ln,lm)
+
+      else 
+        write(POP_stdout,'(a35,3I5.3)') 'EVP Error: unpreconditioned block ',i,j,landindx(i,j,bid,EvpTimeStep)
+      end if 
+    end do 
+  end do 
+
+  do j = 1, EvpYnb
+    js = EvpYbidx(j)
+    je = EvpYbidx(j+1) +1
+    lm = (je-js) +1
+    do i = 1, EvpXnb
+      is = EvpXbidx(i) 
+      ie = EvpXbidx(i+1) +1
+      ln = (ie-is) +1
+      ib = (j-1)*EvpXnb+i
+      PX(is+1:ie-1,js+1:je-1,bid) = tu(1:ln-2,1:lm-2,ib)
+    end do 
+  end do 
+
+
 
 !-----------------------------------------------------------------------
 !EOC
@@ -2891,38 +2973,40 @@
 
  end subroutine btropOperatorAbs
 
-subroutine evppre(cc,ns,ew,ne,rinv,landindx,n,m,nn,mm,ndi,mdi,nb,mb)
+subroutine evppre(cc,ne,rinv,landindx,n,m,nn,mm,ndi,mdi,nb,mb)
   implicit none
   integer,intent(in) :: n,m  ! total block size
   integer,intent(in) :: nn,mm  ! small block ideal size
-  real(POP_r8),dimension(n,m),intent(in) :: cc,ns,ew,ne
+  real(POP_r8),dimension(n,m),intent(in) :: cc,ne
   real(POP_r8),dimension(nn+mm-1,nn+mm-1,nb*mb),intent(inout):: rinv
   integer,dimension(nb,mb),intent(inout):: landindx
   integer,intent(in) :: nb, mb  ! blocks on x and y direction 
   integer,intent(in) :: ndi(nb+1),mdi(mb+1) ! bound index 
 
   ! local 
-  integer :: i,j,is,ie,js,je,ln,lm,l
-  do i = 1, nb
-    is = ndi(i)-1
-    ie = ndi(i+1)
-    ln = (ie-is) +1
-    do j = 1, mb
-      js = mdi(j)-1
-      je = mdi(j+1) 
+  integer :: i,j,is,ie,js,je,ln,lm,l,ib
+
+  do j = 1, mb
+    js = mdi(j)-1
+    je = mdi(j+1) 
+    lm = (je-js) +1
+    do i = 1, nb
+      is = ndi(i)-1
+      ie = ndi(i+1)
+      ln = (ie-is) +1
+      ib = (j-1)*nb+i
       if(minval(abs(ne(is+1:ie-1,js+1:je-1))) == 0.0_POP_r8 ) then 
         landindx(i,j) = 1
-        rinv(:,:,(i-1)*mb+j) = 0.0_POP_r8
+        rinv(:,:,ib) = 0.0_POP_r8
       else 
         landindx(i,j) = 0
-        lm = (je-js) +1
         l  = ln + lm -5
         !if (POP_myTask == POP_masterTask) then
         !  write(POP_stdout,'(a35,2I5)') 'EVP preconditioning subblock ',i,j
         !  write(POP_stdout,'(a35,5I5)') 'EVP preconditioning subblock ', &
         !        is,ie,js,je,l
         !endif
-        call exppre(cc(is:ie,js:je),ns(is:ie,js:je),ew(is:ie,js:je),ne(is:ie,js:je),rinv(1:l,1:l,(i-1)*mb+j),ln,lm)
+        call exppre(cc(is:ie,js:je),ne(is:ie,js:je),rinv(1:l,1:l,ib),ln,lm)
       end if 
     end do 
   end do 
@@ -2931,69 +3015,69 @@ subroutine evppre(cc,ns,ew,ne,rinv,landindx,n,m,nn,mm,ndi,mdi,nb,mb)
 
 end subroutine 
 
-subroutine evpprecond(cc,ns,ew,ne,rinv,landindx,u,f,n,m,nn,mm,ndi,mdi,nb,mb)
-  implicit none
-  integer,intent(in) :: n,m  ! total block size
-  real(POP_r8),dimension(n,m),intent(in) :: cc,ns,ew,ne,f
-  real(POP_r8),dimension(n,m),intent(inout) :: u
-  real(POP_r8),dimension(nn+mm-1,nn+mm-1,nb*mb),intent(in):: rinv
-  integer,dimension(nb,mb),intent(in):: landindx
-  integer,intent(in) :: nn,mm  ! small block ideal size
-  integer,intent(in) :: nb, mb  ! blocks on x and y direction 
-  integer,intent(in) :: ndi(nb+1),mdi(mb+1) ! bound index 
+!subroutine evpprecond(cc,ns,ew,ne,rinv,landindx,u,f,n,m,nn,mm,ndi,mdi,nb,mb)
+!  implicit none
+!  integer,intent(in) :: n,m  ! total block size
+!  real(POP_r8),dimension(n,m),intent(in) :: cc,ns,ew,ne,f
+!  real(POP_r8),dimension(n,m),intent(inout) :: u
+!  real(POP_r8),dimension(nn+mm-1,nn+mm-1,nb*mb),intent(in):: rinv
+!  integer,dimension(nb,mb),intent(in):: landindx
+!  integer,intent(in) :: nn,mm  ! small block ideal size
+!  integer,intent(in) :: nb, mb  ! blocks on x and y direction 
+!  integer,intent(in) :: ndi(nb+1),mdi(mb+1) ! bound index 
+!
+!  ! local 
+!  integer :: i,j,is,ie,js,je,ln,lm,l
+!  real(POP_r8),dimension(n,m) :: tu
+! 
+!  u = 0.0_POP_r8
+!  tu = 0.0_POP_r8 
+!  do i = 1, nb
+!    is = ndi(i) -1
+!    ie = ndi(i+1) 
+!    ln = (ie-is) +1
+!    do j = 1, mb
+!      js = mdi(j) -1
+!      je = mdi(j+1) 
+!      lm = (je-js) +1
+!      l  = ln + lm -5
+!      !if (POP_myTask == POP_masterTask) then
+!      !  !write(POP_stdout,'(a35,2I5.3)') 'EVP PRECOND block ',i,j
+!      !  !write(POP_stdout,'(a30,7I5.3)') 'EVP block size',is,ie,js,je,ln,lm,l
+!      !endif
+!      if (landindx(i,j) == 1 ) then 
+!        ! diagonal preconditioning for land blocks
+!        
+!        where(cc(is+1:ie-1,js+1:je-1) /= 0.0) 
+!          tu(is+1:ie-1,js+1:je-1) = & 
+!                    f(is+1:ie-1,js+1:je-1)/cc(is+1:ie-1,js+1:je-1)
+!        end where
+!
+!      else if (landindx(i,j) == 0 ) then 
+!        call expevp(cc(is:ie,js:je),ns(is:ie,js:je),ew(is:ie,js:je),ne(is:ie,js:je),rinv(1:l,1:l,(i-1)*mb+j),u(is:ie,js:je),tu(is+1:ie-1,js+1:je-1),f(is:ie,js:je),ln,lm)
+!
+!      else 
+!        write(POP_stdout,'(a35,3I5.3)') 'EVP Error: unpreconditioned block ',i,j,landindx(i,j)
+!      end if 
+!    end do 
+!  end do 
+!  do i = 1, nb
+!    is = ndi(i) -1
+!    ie = ndi(i+1) 
+!    do j = 1, mb
+!      js = mdi(j)-1 
+!      je = mdi(j+1) 
+!      u(is+1:ie-1,js+1:je-1) = tu(is+1:ie-1,js+1:je-1)
+!    end do 
+!  end do 
+!  
+!
+!  end subroutine 
 
-  ! local 
-  integer :: i,j,is,ie,js,je,ln,lm,l
-  real(POP_r8),dimension(n,m) :: tu
- 
-  u = 0.0_POP_r8
-  tu = 0.0_POP_r8 
-  do i = 1, nb
-    is = ndi(i) -1
-    ie = ndi(i+1) 
-    ln = (ie-is) +1
-    do j = 1, mb
-      js = mdi(j) -1
-      je = mdi(j+1) 
-      lm = (je-js) +1
-      l  = ln + lm -5
-      !if (POP_myTask == POP_masterTask) then
-      !  !write(POP_stdout,'(a35,2I5.3)') 'EVP PRECOND block ',i,j
-      !  !write(POP_stdout,'(a30,7I5.3)') 'EVP block size',is,ie,js,je,ln,lm,l
-      !endif
-      if (landindx(i,j) == 1 ) then 
-        ! diagonal preconditioning for land blocks
-        
-        where(cc(is+1:ie-1,js+1:je-1) /= 0.0) 
-          tu(is+1:ie-1,js+1:je-1) = & 
-                    f(is+1:ie-1,js+1:je-1)/cc(is+1:ie-1,js+1:je-1)
-        end where
-
-      else if (landindx(i,j) == 0 ) then 
-        call expevp(cc(is:ie,js:je),ns(is:ie,js:je),ew(is:ie,js:je),ne(is:ie,js:je),rinv(1:l,1:l,(i-1)*mb+j),u(is:ie,js:je),tu(is+1:ie-1,js+1:je-1),f(is:ie,js:je),ln,lm)
-
-      else 
-        write(POP_stdout,'(a35,3I5.3)') 'EVP Error: unpreconditioned block ',i,j,landindx(i,j)
-      end if 
-    end do 
-  end do 
-  do i = 1, nb
-    is = ndi(i) -1
-    ie = ndi(i+1) 
-    do j = 1, mb
-      js = mdi(j)-1 
-      je = mdi(j+1) 
-      u(is+1:ie-1,js+1:je-1) = tu(is+1:ie-1,js+1:je-1)
-    end do 
-  end do 
-  
-
-  end subroutine 
-
-subroutine exppre(cc,ns,ew,ne,rinv,n,m)
+subroutine exppre(cc,ne,rinv,n,m)
   implicit none
   integer,intent(in) :: n,m
-  real(POP_r8),dimension(n,m),intent(in) :: cc,ns,ew,ne
+  real(POP_r8),dimension(n,m),intent(in) :: cc,ne
 
   real(POP_r8),dimension(n +m -5,n +m -5),intent(inout) :: rinv
 
@@ -3013,10 +3097,6 @@ subroutine exppre(cc,ns,ew,ne,rinv,n,m)
     do j = 2, m-1
       do i = 2, n-1
         y(i+1,j+1)  = (- cc(i,j)     * y(i,j )     & 
-               -  ns(i,j)     * y(i,j+1)    &
-               -  ns(i,j-1)   * y(i,j-1)    &
-               -  ew(i,j)     * y(i+1,j)    &
-               -  ew(i-1,j)   * y(i-1,j)    &
                -  ne(i,j-1)   * y(i+1,j-1)  &
                -  ne(i-1,j)   * y(i-1,j+1)  & 
                -  ne(i-1,j-1) * y(i-1,j-1) ) /ne(i,j) 
@@ -3040,10 +3120,6 @@ subroutine exppre(cc,ns,ew,ne,rinv,n,m)
     do j = 2, m-1
       do i = 2, n-1
         y(i+1,j+1)  = (- cc(i,j)     * y(i,j )     & 
-               -  ns(i,j)     * y(i,j+1)    &
-               -  ns(i,j-1)   * y(i,j-1)    &
-               -  ew(i,j)     * y(i+1,j)    &
-               -  ew(i-1,j)   * y(i-1,j)    &
                -  ne(i,j-1)   * y(i+1,j-1)  &
                -  ne(i-1,j)   * y(i-1,j+1)  & 
                -  ne(i-1,j-1) * y(i-1,j-1) ) /ne(i,j) 
@@ -3091,10 +3167,10 @@ subroutine exppre(cc,ns,ew,ne,rinv,n,m)
   !write(*,*) rin(:,:)
 
 end subroutine 
-subroutine expevp(cc,ns,ew,ne,rinv,u,tu,f,n,m)
+subroutine expevp(cc,ne,ine,rinv,u,tu,f,n,m)
   implicit none
-  integer:: n,m
-  real(POP_r8),dimension(n,m),intent(in) :: cc,ns,ew,ne
+  integer (POP_i4) :: n,m
+  real(POP_r8),dimension(n,m),intent(in) :: cc,ne,ine
   real(POP_r8),dimension(n,m),intent(in) :: f
   real(POP_r8),dimension(n,m),intent(in) :: u
   real(POP_r8),dimension(n-2,m-2),intent(inout) :: tu
@@ -3103,9 +3179,8 @@ subroutine expevp(cc,ns,ew,ne,rinv,u,tu,f,n,m)
 
   !local 
   integer :: i,j,k,nm
-  real(POP_r8),dimension(n,m) :: y,ry,ff
+  real(POP_r8),dimension(n,m) :: y
   real(POP_r8),dimension(n+m-5) :: r
-  real(POP_r8) :: rr
 
   nm = n+m-5
   y(:,:) = u(:,:) 
@@ -3114,23 +3189,21 @@ subroutine expevp(cc,ns,ew,ne,rinv,u,tu,f,n,m)
   do j = 2, m-1
     do i = 2, n-1
         y(i+1,j+1)  = (f(i,j)- cc(i,j)     * y(i,j )     & 
-               -  ns(i,j)     * y(i,j+1)    &
-               -  ns(i,j-1)   * y(i,j-1)    &
-               -  ew(i,j)     * y(i+1,j)    &
-               -  ew(i-1,j)   * y(i-1,j)    &
                -  ne(i,j-1)   * y(i+1,j-1)  &
                -  ne(i-1,j)   * y(i-1,j+1)  & 
-               -  ne(i-1,j-1) * y(i-1,j-1) ) /ne(i,j) 
+               -  ne(i-1,j-1) * y(i-1,j-1) ) *ine(i,j) 
     end do
   end do
 
-  do i = 1,n-2
-    r(i) = y(i+2,m)-u(i+2,m)
-  end do 
+  !do i = 1,n-2
+  !  r(i) = y(i+2,m)-u(i+2,m)
+  !end do 
+  r(1:n-2) = y(3:n,m)-u(3:n,m)
 
-  do j = 1,m-3
-    r(n-2+j) = y(n,m-j) -u(n,m-j)
-  end do 
+  !do j = 1,m-3
+  !  r(n-2+j) = y(n,m-j) -u(n,m-j)
+  !end do 
+  r(n-1:n+m-5) = y(n,m-1:3:-1) -u(n,m-1:3:-1)
 
   do j = 1,m-2
       do k = 1,nm
@@ -3147,56 +3220,39 @@ subroutine expevp(cc,ns,ew,ne,rinv,u,tu,f,n,m)
   do j = 2, m-2
     do i = 2, n-2
         y(i+1,j+1)  = (f(i,j)- cc(i,j)     * y(i,j )     & 
-               -  ns(i,j)     * y(i,j+1)    &
-               -  ns(i,j-1)   * y(i,j-1)    &
-               -  ew(i,j)     * y(i+1,j)    &
-               -  ew(i-1,j)   * y(i-1,j)    &
                -  ne(i,j-1)   * y(i+1,j-1)  &
                -  ne(i-1,j)   * y(i-1,j+1)  & 
-               -  ne(i-1,j-1) * y(i-1,j-1) ) /ne(i,j) 
-    end do
+               -  ne(i-1,j-1) * y(i-1,j-1) ) *ine(i,j) 
+      end do
   end do
   tu(1:n-2,1:m-2) = y(2:n-1,2:m-1) 
   !
-  y(:,:) = u(:,:)
-  y(2:n-1,2:m-1) = tu(1:n-2,1:m-2) 
+  !y(:,:) = u(:,:)
+  !y(2:n-1,2:m-1) = tu(1:n-2,1:m-2) 
   
-  rr = 0.0_POP_r8
+  !rr = 0.0_POP_r8
 
-  do j = 2, m-2
-    do i = 2, n-2
-      ry(i,j) = f(i,j)- cc(i,j)     * y(i,j )     & 
-               -  ns(i,j)     * y(i,j+1)    &
-               -  ns(i,j-1)   * y(i,j-1)    &
-               -  ew(i,j)     * y(i+1,j)    &
-               -  ew(i-1,j)   * y(i-1,j)    &
-               -  ne(i,j-1)   * y(i+1,j-1)  &
-               -  ne(i-1,j)   * y(i-1,j+1)  & 
-               -  ne(i-1,j-1) * y(i-1,j-1)  &
-               -  ne(i,j)     * y(i+1,j+1)
-      rr = rr + ry(i,j)
-    end do
-  end do
-  if ( rr > 1.0) then 
-   write(POP_stdout,'(a10,I5,a15,f27.9)') 'PROC ',POP_myTask,'EVP rr ',rr
+  !do j = 2, m-2
+  !  do i = 2, n-2
+  !    ry(i,j) = f(i,j)- cc(i,j)     * y(i,j )     & 
+  !             -  ns(i,j)     * y(i,j+1)    &
+  !             -  ns(i,j-1)   * y(i,j-1)    &
+  !             -  ew(i,j)     * y(i+1,j)    &
+  !             -  ew(i-1,j)   * y(i-1,j)    &
+  !             -  ne(i,j-1)   * y(i+1,j-1)  &
+  !             -  ne(i-1,j)   * y(i-1,j+1)  & 
+  !             -  ne(i-1,j-1) * y(i-1,j-1)  &
+  !             -  ne(i,j)     * y(i+1,j+1)
+  !    rr = rr + ry(i,j)
+  !  end do
+  !end do
+  !if ( rr > 1.0) then 
+  ! write(POP_stdout,'(a10,I5,a15,f27.9)') 'PROC ',POP_myTask,'EVP rr ',rr
    !write(POP_stdout,'(a30)') 'EVP PRECOND NE'
    !write(POP_stdout,'(5e15.5)') ne(:,:)
    !write(POP_stdout,'(a30)') 'EVP PRECOND RINV'
    !write(POP_stdout,'(5e15.5)') rinv(:,:)
-  end if 
-
-  !u(:,:) = u(:,:)*cc(:,:)
-  !write(*,*) 'final u'
-  !write(*,'(5f18.5)')  u(:,:)
-  !write(*,*) 'final f'
-  !write(*,'(5f18.5)')  f(:,:)
-  !y(:,:) = 0.
-  !ry(:,:) = u(:,:)
-  !ry(2:n-1,2:m-1) = tu
-  !y(:,:) = 0.0
-  !call calc_rhs(cc,ns,ew,ne,ry,f,y,n,m,rr)
-  !write(*,*) 'rr in evp  :', rr
-  !write(*,'(5e18.5)') y
+  !end if 
 
 end subroutine 
 

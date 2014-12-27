@@ -16,8 +16,8 @@ begin
     data1 = testin->$varname$
     data2 = cntrlin->$varname$
     tmpdata = data1-data2
-    ;data = PopLatLon(tmpdata,"gx1v6","1x1d","bilin","da","100716") ; remap, to make error more fluent
-    data = tmpdata
+    data = PopLatLon(tmpdata,"gx1v6","1x1d","bilin","da","100716") ; remap, to make error more fluent
+    ;data = tmpdata
     ;printVarSummary(data)
     dim = dimsizes(data)
     ndim = dimsizes(dim)
@@ -103,17 +103,17 @@ begin
     printVarSummary(T)
     print("maxT : "+maxT+"   minT : "+minT)
 
-    wks = gsn_open_wks("X11",outfile)      ; open a ps file
+    wks = gsn_open_wks("png",outfile)      ; open a ps file
     res=True
     res@tiMainString         = direction+"("+val+")  "+outfile       ; turn on color fill
 
     res@cnFillOn             = True       ; turn on color fill
     res@cnLineLabelsOn       = False      ; turns off contour line labels
     res@cnFillMode           = "RasterFill"      ; turns off contour line labels
-    ;res@cnLevelSelectionMode = "Manuallevels"
-    ;res@cnMinLevelValF = -mmax
-    ;res@cnMaxLevelValF = mmax
-    ;res@cnLevelSpacingF = mmax/3.5
+    res@cnLevelSelectionMode = "Manuallevels"
+    res@cnMinLevelValF = -mmax
+    res@cnMaxLevelValF = mmax
+    res@cnLevelSpacingF = mmax/3.5
     res@cnFillPalette = "BlWhRe"
     res@gsnAddCyclic = True       ; add longitude cyclic point to avoid the white line
 

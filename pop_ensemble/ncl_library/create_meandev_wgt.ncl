@@ -193,6 +193,7 @@ begin
   output3d = new(output_dims3d, float)
   ensemble3d = new(ensemble_dims3d, float)
   Zscore3d=new((/nvars3d, nfiles/),float)
+  Zscore3d_lev=new((/nvars3d, nfiles,nlevs/),float)
   area_wgt_lev=new((/nlevs/),float)
   output2d = new(output_dims2d, float)
   ensemble2d = new(ensemble_dims2d, float)
@@ -254,13 +255,14 @@ begin
         Zscore2d(v,n) = sum_sqr(calc_Z(output2d(n,:), ens_avg2d(v,:), ens_stddev2d(v,:), \
                                        count2d, flag2d))
       else
-        Zscore2d(v,n) = sum_sqr(calc_Z(output2d(n,:,:), ens_avg2d(v,:,:), ens_stddev2d(v,:,:), \
-                                       count2d, flag2d))
+        calcZ =  calc_Z(output2d(n,:,:), ens_avg2d(v,:,:), ens_stddev2d(v,:,:), count2d, flag2d)
+        tmp_wgt = where(calcZ .eq. 0., 0.,area_wgt)
+        Zscore2d(v,n) =  wgt_arearmse2(calcZ, zeroR,tmp_wgt,0)
+        print((/"2D zscore = "+Zscore2d(v,n)/))
       end if
       ; Average over number of points
       if (count2d.lt.npts2d) then
-        Zscore2d(v,n) = sqrt ( Zscore2d(v,n) / (npts2d-count2d))
-        print((/"Zscore = "+Zscore2d(v,n)/))
+        ;Zscore2d(v,n) = sqrt ( Zscore2d(v,n) / (npts2d-count2d))
       else
         print((/"WARNING: no variance in "+var_name2d(v)/))
       end if
@@ -321,25 +323,35 @@ begin
           print((/"Computing file "+(n+1)+" of "+nfiles+"..."/))
         end if
 
+        Zscore3d_lev(v,n,:)=0.
         Zscore3d(v,n)=0.
         flag3d          = False
         count3d         = 0
+        area_zt_wgt = 0.
         do k=0,nlevs-1
           if (one_spatial_dim) then
             Zscore3d(v,n) = Zscore3d(v,n) + sum_sqr(calc_Z(output3d(n,k,:), ens_avg3d(v,k,:), \
                                                     ens_stddev3d(v,k,:), count3d, flag3d))
             global_mean_lev_3d(v,n,k) = area_avg_SE(output3d(n,k,:), area_wgt)
           else
-            Zscore3d(v,n) = Zscore3d(v,n) + sum_sqr(calc_Z(output3d(n,k,:,:), ens_avg3d(v,k,:,:), \
-                                                    ens_stddev3d(v,k,:,:), count3d, flag3d))
+            ;Zscore3d(v,n) = Zscore3d(v,n) + sum_sqr(calc_Z(output3d(n,k,:,:), ens_avg3d(v,k,:,:), \
+            ;                                        ens_stddev3d(v,k,:,:), count3d, flag3d))
+            calcZ =  calc_Z(output3d(n,k,:,:), ens_avg3d(v,k,:,:), ens_stddev3d(v,k,:,:), count3d, flag3d)
+            tmp_wgt = where(calcZ .eq. 0., 0., area_wgt)
+            area_wgt_lev(k) = sum(tmp_wgt)
+            area_zt_wgt = area_zt_wgt + area_wgt_lev(k)*z_wgt(k)
+            ;print((/"area_wgt = "+area_wgt_lev(k)+" on level "+k/))
+            Zscore3d_lev(v,n,k) =  wgt_arearmse2(calcZ, zeroR,tmp_wgt,0)
+            print((/"zscore = "+Zscore3d_lev(v,n,k)+" on level "+k/))
+            Zscore3d(v,n) = Zscore3d(v,n) + Zscore3d_lev(v,n,k)*Zscore3d_lev(v,n,k)*area_wgt_lev(k)*z_wgt(k)
             global_mean_lev_3d(v,n,k) = area_avg(output3d(n,k,:,:), area_wgt)
           end if
         end do ; k-loop
 
         ; Average over number of points
         if (count3d.lt.npts3d) then
-          Zscore3d(v,n) = sqrt ( Zscore3d(v,n) / (npts3d-count3d))
-          print((/"Zscore = "+Zscore3d(v,n)/))
+          Zscore3d(v,n) = sqrt ( Zscore3d(v,n) / area_zt_wgt)
+          print((/"Final zscore = "+Zscore3d(v,n)/))
         else
           print((/"WARNING: no variance in "+var_name3d(v)/))
         end if
@@ -374,7 +386,7 @@ begin
   fAtt@resolution    = resolution
   fAtt@compset       = compset
   fAtt@tag           = tag
-  fAtt@title         = "POP validation means and std devs"
+  fAtt@title         = "CAM validation means and std devs"
   fAtt@creation_date = systemfunc("date")
   fileattdef(fout, fAtt)
 
