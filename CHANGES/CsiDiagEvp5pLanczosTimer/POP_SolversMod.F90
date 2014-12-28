@@ -152,6 +152,12 @@
       convergenceCriterion, &! convergence error criterion
       residualNorm           ! residual normalization
 
+   real (POP_r8),save ::          & 
+      csu,csv             ! csu, csv for saving 
+
+   integer (POP_i4),save :: &
+      FirstRunCsi	!  index of call number of CSI
+
    !*** convergence diagnostics
 
    integer (POP_i4), public ::      &
@@ -220,6 +226,10 @@
       numProcs           ! number of processors in barotropic distrib
    integer (POP_i4) :: &
       EvpPreFlag
+
+   integer (POP_i4) :: &
+      LanczosFirst
+
    real (POP_r8), dimension(2) :: &
       histmaxcc
    real (POP_r8):: &
@@ -244,6 +254,9 @@
 
    save EvpPreFlag
    data EvpPreFlag /0/
+
+   save LanczosFirst
+   data LanczosFirst /0/
    save histmaxcc
    data histmaxcc /0.0_POP_r8,0.0_POP_r8/
 
@@ -305,73 +318,87 @@
 
    if (POP_myTask < numProcs) then
       
-     if (usePreconditioner) then
-      maxcc = maxval(abs(btropWgtCenter))
-      EvpTimeStep = 0
 
-      do i = 1, 2
-        if(maxcc == histmaxcc(i))  EvpTimeStep = i
-      end do 
+      if (usePreconditioner) then
+        maxcc = maxval(abs(btropWgtCenter))
+        EvpTimeStep = 0
 
-      if (EvpTimeStep == 0) then
-        EvpPreFlag = EvpPreFlag +1
-        histmaxcc(EvpPreFlag) = maxcc
-        EvpTimeStep = EvpPreFlag
-
-        if (EvpPreFlag > 2) then 
-          write(POP_stdout,'(a35,I2)') ' Solver EVP more than twice'
-          call POP_ErrorSet(errorCode, &
-          'POP_EVPPRECOND: PRECOND more than 2 times')
-        endif
-
-        if (POP_myTask == POP_masterTask) then
-          write(POP_stdout,'(a35,I2)') ' Solver EVP preconditioning START',EvpPreFlag
-        endif
-
-        call timer_start(timer_evpprep)
-
-        lcc(:,:,:,:) = 0.0
-        lne(:,:,:,:) = 0.0
-        ilcc(:,:,:,:) = 0.0
-        ilne(:,:,:,:) = 0.0
-        do bid=1,numBlocks
-          nx1 = POP_nxBlock-1
-          ny1 = POP_nyBlock-1
-          call evppre(btropWgtCenter(2:nx1,2:ny1,bid),btropWgtNE(2:nx1,2:ny1,bid),& 
-          rinv(:,:,:,bid,EvpPreFlag),landindx(:,:,bid,EvpPreFlag),POP_nxBlock-2,POP_nyBlock-2,EvpXbs,EvpYbs,EvpXbidx,EvpYbidx,EvpXnb,EvpYnb)
-
-          do j = 1, EvpYnb
-            js = EvpYbidx(j) 
-            je = EvpYbidx(j+1) +1
-            lm = (je-js) +1
-            do i = 1, EvpXnb
-              is = EvpXbidx(i) 
-              ie = EvpXbidx(i+1) +1
-              ln = (ie-is) +1
-              ib = (j-1)*EvpXnb+i
-              lcc(1:ln,1:lm,ib,bid) = btropWgtCenter(is:ie,js:je,bid)
-              lne(1:ln,1:lm,ib,bid) = btropWgtNE    (is:ie,js:je,bid)
-            end do 
-          end do 
-          where(lcc(:,:,:,bid) .ne. 0.0) 
-            ilcc(:,:,:,bid) = 1.0_POP_r8/lcc(:,:,:,bid)
-          end where
-          where(lne(:,:,:,bid) .ne. 0.0) 
-            ilne(:,:,:,bid) = 1.0_POP_r8/lne(:,:,:,bid)
-          end where
-
+        do i = 1, 2
+          if(maxcc == histmaxcc(i))  EvpTimeStep = i
         end do 
-        call timer_stop(timer_evpprep)
 
-        if (POP_myTask == POP_masterTask) then
-          write(POP_stdout,'(a35)') ' Solver EVP preconditioning END'
+        if (EvpTimeStep == 0) then
+          EvpPreFlag = EvpPreFlag +1
+          histmaxcc(EvpPreFlag) = maxcc
+          EvpTimeStep = EvpPreFlag
+
+          if (EvpPreFlag > 2) then 
+            write(POP_stdout,'(a35,I2)') ' Solver EVP more than twice'
+            call POP_ErrorSet(errorCode, &
+            'POP_EVPPRECOND: PRECOND more than 2 times')
+          endif
+
+          if (POP_myTask == POP_masterTask) then
+            write(POP_stdout,'(a35,I2)') ' Solver EVP preconditioning START',EvpPreFlag
+          endif
+
+          call timer_start(timer_evpprep)
+
+          lcc(:,:,:,:) = 0.0
+          lne(:,:,:,:) = 0.0
+          ilcc(:,:,:,:) = 0.0
+          ilne(:,:,:,:) = 0.0
+          do bid=1,numBlocks
+            nx1 = POP_nxBlock-1
+            ny1 = POP_nyBlock-1
+            call evppre(btropWgtCenter(2:nx1,2:ny1,bid),btropWgtNE(2:nx1,2:ny1,bid),& 
+            rinv(:,:,:,bid,EvpPreFlag),landindx(:,:,bid,EvpPreFlag),POP_nxBlock-2,POP_nyBlock-2,EvpXbs,EvpYbs,EvpXbidx,EvpYbidx,EvpXnb,EvpYnb)
+
+            do j = 1, EvpYnb
+              js = EvpYbidx(j) 
+              je = EvpYbidx(j+1) +1
+              lm = (je-js) +1
+              do i = 1, EvpXnb
+                is = EvpXbidx(i) 
+                ie = EvpXbidx(i+1) +1
+                ln = (ie-is) +1
+                ib = (j-1)*EvpXnb+i
+                lcc(1:ln,1:lm,ib,bid) = btropWgtCenter(is:ie,js:je,bid)
+                lne(1:ln,1:lm,ib,bid) = btropWgtNE    (is:ie,js:je,bid)
+              end do 
+            end do 
+            where(lcc(:,:,:,bid) .ne. 0.0) 
+              ilcc(:,:,:,bid) = 1.0_POP_r8/lcc(:,:,:,bid)
+            end where
+            where(lne(:,:,:,bid) .ne. 0.0) 
+              ilne(:,:,:,bid) = 1.0_POP_r8/lne(:,:,:,bid)
+            end where
+
+          end do 
+          call timer_stop(timer_evpprep)
+
+          if (POP_myTask == POP_masterTask) then
+            write(POP_stdout,'(a35)') ' Solver EVP preconditioning END'
+          endif
+
         endif
-
       endif
-     endif
+
+      if( (LanczosFirst .eq. 0) .and. (trim(solverChoice) .eq. solverChoiceCSI)  ) then
+        call POP_Barrier
+        call timer_start(timer_lanczos)
+        call lanczos(POP_nxBlock, POP_nxBlock, numBlocks, LanczosStep, csu, csv, errorCode)
+        call timer_stop(timer_lanczos)
+
+        if (POP_myTask == POP_masterTask) then 
+            write(POP_stdout,*) "Lanczos Step: ", LanczosStep
+            write(POP_stdout,*) "Lanczos eigenvalues: ", csu,csv
+        end if 
+        LanczosFirst = 1
+      endif 
 
       call POP_Barrier
-
+      
       call timer_start(timer_solver)
       select case(trim(solverChoice))
       case (solverChoicePCG)
@@ -1503,14 +1530,14 @@
       numBlocks,       &! number of local blocks
       iblock            ! local block     counter
 
-   integer (POP_i4) :: &
-      FirstRunCsi	!  index of call number of CSI
+  ! integer (POP_i4) :: &
+  !    FirstRunCsi	!  index of call number of CSI
 
-   real (POP_r8),save ::          & 
-      scsu,scsv             ! csu, csv for saving 
+  ! real (POP_r8),save ::          & 
+  !    scsu,scsv             ! csu, csv for saving 
 
    real (POP_r8) ::          &
-      csu,csv,csalpha,csgamma, csbeta ,csomga,rr,  & ! scalar inner product results
+      csalpha,csgamma, csbeta ,csomga,rr,  & ! scalar inner product results
       normb,rr0, csc, csv1, exp_iter ! scalar inner product results
    
    real (POP_r8), dimension(2)::          &
@@ -1529,8 +1556,6 @@
 !
 !-----------------------------------------------------------------------
 
-   save FirstRunCsi
-   data FirstRunCsi /0/
 
    errorCode = POP_Success
 
@@ -1562,60 +1587,6 @@
       end do 
    endif
    
-   ! initiate u,v !edit by hy used only once!
-   if (FirstRunCsi == 0 ) then
-
-        !$OMP PARALLEL DO PRIVATE(iblock)
-        do iblock=1,numBlocks
-             WORK0(:,:,iblock) = 1.0_POP_r8
-             call BtropOperator(WORK1,WORK0,iblock)
-             call BtropOperatorAbs(S,WORK0,iblock)
-
-             if (usePreconditioner) then
-                 call preconditioner(work1,S,iblock)
-                 do j=1,ny
-                 do i=1,nx
-                     S(i,j,iblock) = work1(i,j,iblock)
-                 end do
-                 end do
-             else
-                 do j=1,ny
-                 do i=1,nx
-                    S(i,j,iblock) = S(i,j,iblock)*A0R(i,j,iblock)
-                 end do
-                 end do
-
-             endif
-        end do ! block loop
-        !$OMP END PARALLEL DO
-
-        uvsum(1) = POP_GlobalSum(work1, POP_distrbTropic, &
-             POP_gridHorzLocCenter,   &
-             errorCode, mMask = mMaskTropic)
-        uvsum(2) = POP_GlobalSum(btropWgtCenter, POP_distrbTropic, &
-             POP_gridHorzLocCenter,   &
-             errorCode, mMask = mMaskTropic)
-        scsv = uvsum(1)/uvsum(2)
-
-        scsu = POP_GlobalMaxval(S,POP_distrbTropic,errorCode, CALCU)
-
-        FirstRunCsi = 1
-        if (POP_myTask == POP_masterTask) then 
-            write(POP_stdout,*) "Estimate eigenvalues: ", scsu, scsv
-        end if 
-
-        call lanczos(nx, ny, numBlocks, LanczosStep, scsu, scsv, errorCode)
-
-        if (POP_myTask == POP_masterTask) then 
-            write(POP_stdout,*) "Lanczos Step: ", LanczosStep
-            write(POP_stdout,*) "Lanczos eigenvalues: ", scsu,scsv
-        end if 
-
-   end if
-   ! end init u,v
-
-   csu = scsu 
-   csv = scsv 
 
 
    csalpha = 2.0_POP_r8/(csu-csv);
@@ -1939,11 +1910,6 @@
       numBlocks,       &! number of local blocks
       iblock            ! local block     counter
 
-   integer (POP_i4) :: &
-      FirstRunCsi	!  index of call number of CSI
-
-   real (POP_r8),save ::          &
-      csu,csv
 
    real (POP_r8) ::          &
       csalpha,csbeta,csy,csomga,rr ! scalar inner product results
@@ -1965,8 +1931,6 @@
 !
 !-----------------------------------------------------------------------
 
-   save FirstRunCsi
-   data FirstRunCsi /0/
 
    call timer_start(timer_compute)
    errorCode = POP_Success
@@ -2003,66 +1967,6 @@
    endif
 
 
-   call timer_stop(timer_compute)
-   call timer_start(timer_lanczos)
-
-   ! initiate u,v !edit by hy used only once!
-   if (FirstRunCsi == 0 ) then
-
-      !$OMP PARALLEL DO PRIVATE(iblock)
-      do iblock=1,numBlocks
-        WORK0(:,:,iblock) = 1.0_POP_r8
-        call BtropOperator(WORK1,WORK0,iblock)
-        call BtropOperatorAbs(S,WORK0,iblock)
-
-        if (usePreconditioner) then
-            call preconditioner(work1,S,iblock)
-            do j=1,ny
-            do i=1,nx
-                S(i,j,iblock) = work1(i,j,iblock)
-            end do
-            end do
-        else
-            do j=1,ny
-            do i=1,nx
-                S(i,j,iblock) = S(i,j,iblock)*A0R(i,j,iblock)
-            end do
-            end do
-
-        endif
-      end do ! block loop
-      !$OMP END PARALLEL DO
-
-      uvsum(1) = POP_GlobalSum(work1, POP_distrbTropic, &
-                    POP_gridHorzLocCenter,   &
-                    errorCode, mMask = mMaskTropic)
-      uvsum(2) = POP_GlobalSum(btropWgtCenter, POP_distrbTropic, &
-                    POP_gridHorzLocCenter,   &
-                    errorCode, mMask = mMaskTropic)
-      csv = uvsum(1)/uvsum(2)
-
-      csu = POP_GlobalMaxval(S,POP_distrbTropic,errorCode, CALCU)
-
-      FirstRunCsi = 1
-
-      if (POP_myTask == POP_masterTask) then 
-          write(POP_stdout,'(a20,2f15.5)') "Estimate eigenvalues: ", csu, csv
-      end if 
-
-      call lanczos(nx, ny, numBlocks,LanczosStep, csu, csv, errorCode)
-
-      if (POP_myTask == POP_masterTask) then 
-          write(POP_stdout,*) "Lanczos Step: ", LanczosStep
-          write(POP_stdout,'(a20,2f15.5)') "Lanczos eigenvalues: ", csu,csv
-      end if 
-      !call POP_ErrorSet(errorCode, &
-      !      'POP_SolversCSI: break for check')
-   end if
-   ! end init u,v
-
-    
-   call timer_stop(timer_lanczos)
-   call timer_start(timer_compute)
     
     csalpha = 2.0_POP_r8/(csu-csv);
     csbeta = (csu+csv)/(csu-csv);
@@ -2082,7 +1986,6 @@
     end do ! block loop
    !$OMP END PARALLEL DO
 
-   call timer_stop(timer_compute)
    call timer_start(timer_precond)
 
     !$OMP PARALLEL DO PRIVATE(iblock,i,j)
@@ -2112,6 +2015,8 @@
    !$OMP END PARALLEL DO
 
    call timer_stop(timer_precond)
+   call timer_stop(timer_compute)
+
    call timer_start(timer_haloupdate)
     
     call POP_HaloUpdate(Q, POP_haloTropic, POP_gridHorzLocCenter, &
@@ -2167,8 +2072,11 @@
     !-----------------------------------------------------------------------
     
     iterationLoop: do m = 1, maxIterations
-    
+
+
+    call timer_start(timer_compute)
     call timer_start(timer_precond)
+
     csomga = 1.0_POP_r8/(csy-csomga/(4.0_POP_r8*csalpha*csalpha))
 
     !$OMP PARALLEL DO PRIVATE(iblock)
@@ -2191,6 +2099,7 @@
     !$OMP END PARALLEL DO
   
     call timer_stop(timer_precond)
+    call timer_stop(timer_compute)
 
     if ( usePreconditioner) then
     call timer_start(timer_haloupdate)
@@ -2452,6 +2361,7 @@
 !-----------------------------------------------------------------------
 
 
+   call timer_start(timer_compute)
    call timer_start(timer_precond)
 
    !$OMP PARALLEL DO PRIVATE(iblock,i,j)
@@ -2471,6 +2381,8 @@
    end do
    !$OMP END PARALLEL DO
    call timer_stop(timer_precond)
+   call timer_stop(timer_compute)
+
    call timer_start(timer_haloupdate)
 
    if (usePreconditioner) then
@@ -2567,6 +2479,7 @@
 !
 !-----------------------------------------------------------------------
 
+      call timer_start(timer_compute)
       call timer_start(timer_precond)
       !$OMP PARALLEL DO PRIVATE(iblock,i,j)
       do iblock=1,numBlocks
@@ -2584,6 +2497,7 @@
       !$OMP END PARALLEL DO
 
       call timer_stop(timer_precond)
+      call timer_stop(timer_compute)
 
       call timer_start(timer_haloupdate)
       if (usePreconditioner) then
