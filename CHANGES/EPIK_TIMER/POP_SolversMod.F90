@@ -28,8 +28,6 @@
    use POP_GridHorzMod
    use POP_FieldMod
    use POP_DomainSizeMod
-   use timers
-   use time_management,only:c2dtp
    use domain
    use grid
 
@@ -63,10 +61,6 @@
    real (POP_r8), dimension (:,:,:), allocatable, public :: & 
       centerWgtClinicIndep, &! time indep  center wgt on clinic distrb
       centerWgtClinic        ! time depend center wgt on clinic distrb  
-   real (POP_r8), dimension (:,:,:,:,:), allocatable, public :: & 
-      rinv! EVP pre
-   real (POP_r8), dimension (:,:,:,:), allocatable, public :: & 
-      lcc,lne,ilcc,ilne
 
 !EOP
 !BOC
@@ -103,61 +97,24 @@
    character (8), parameter :: &
       precondChoiceDiag = 'diagonal'
    character (4), parameter :: &
-      precondChoiceEvp = 'evp'
-   character (4), parameter :: &
       precondChoiceFile = 'file'
 
    logical (POP_logical) :: &
       usePreconditioner
-
-   integer(POP_i4)  :: &
-      EvpXbs, EvpYbs
-
-   integer (POP_i4) :: &
-      EvpTimeStep  
-
-   integer (POP_i4) :: &
-      LanczosStep
-
-   integer (POP_i4) :: &
-      EvpXnb,          &! block counter
-      EvpYnb           ! block counter
-
-   integer (POP_i4),dimension(:),allocatable :: &
-      EvpXbidx,          &! block counter
-      EvpYbidx            !block counter
-   integer (POP_i4),dimension(:,:,:,:),allocatable :: &
-      landindx
 
 !-----------------------------------------------------------------------
 !
 !  scalar convergence-related variables
 !
 !-----------------------------------------------------------------------
-   integer (POP_i4), private :: &
-      timer_haloupdate,     &! timer number for step
-      timer_globalsum,      &! timer for baroclinic parts of step
-      timer_lanczos,        &! timer for barotropic part  of step
-      timer_compute,        &! timer for barotropic part  of step
-      timer_evpprep,        &! timer for evp preprocessing
-      timer_solver,         &! timer for evp preprocessing
-      timer_precond         ! timer for evp preconditioning
-
 
    integer (POP_i4) ::      &
       maxIterations,        &! max number of solver iterations
-      convergenceCheckStart,        &! max number of solver iterations
       convergenceCheckFreq   ! check convergence every freq steps
 
    real (POP_r8) ::         &
       convergenceCriterion, &! convergence error criterion
       residualNorm           ! residual normalization
-
-   real (POP_r8),save ::          & 
-      csu,csv             ! csu, csv for saving 
-
-   integer (POP_i4),save :: &
-      FirstRunCsi	!  index of call number of CSI
 
    !*** convergence diagnostics
 
@@ -225,19 +182,6 @@
 
    integer (POP_i4) :: &
       numProcs           ! number of processors in barotropic distrib
-   integer (POP_i4) :: &
-      EvpPreFlag
-
-   integer (POP_i4) :: &
-      LanczosFirst
-
-   real (POP_r8), dimension(2) :: &
-      histc2dtp
-
-   integer (POP_i4) :: &
-      numBlocks           ! number of processors in barotropic distrib
-   integer (POP_i4) :: &
-      bid,i,j,nx1,ny1,is,js,ie,je,lm,ln,ib           ! number of processors in barotropic distrib
 
    real (POP_r8), dimension(size(sfcPressure,dim=1), &
                             size(sfcPressure,dim=2), &
@@ -250,14 +194,6 @@
 !  switch to the barotropic distribution for iterative solvers
 !
 !-----------------------------------------------------------------------
-
-   save EvpPreFlag
-   data EvpPreFlag /0/
-
-   save LanczosFirst
-   data LanczosFirst /0/
-   save histc2dtp
-   data histc2dtp /0.0_POP_r8,0.0_POP_r8/
 
    errorCode = POP_Success
 
@@ -305,100 +241,7 @@
       return
    endif
 
-   call POP_DistributionGet(POP_distrbTropic, errorCode, &
-                            numLocalBlocks = numBlocks)
-   if (errorCode /= POP_Success) then
-      call POP_ErrorSet(errorCode, &
-         'POP_SolversRun: error getting Tropic blocks')
-      return
-   endif
-  
-
-
    if (POP_myTask < numProcs) then
-      
-
-      if (usePreconditioner) then
-        
-        EvpTimeStep = 0
-
-        do i = 1,2
-          if(c2dtp  == histc2dtp(i))  EvpTimeStep = i
-        end do 
-
-        if (EvpTimeStep == 0) then
-          EvpPreFlag = EvpPreFlag +1
-          histc2dtp(EvpPreFlag) = c2dtp
-          EvpTimeStep = EvpPreFlag
-
-          if (EvpPreFlag > 2) then 
-            write(POP_stdout,'(a35,I2)') ' Solver EVP more than twice'
-            call POP_ErrorSet(errorCode, &
-            'POP_EVPPRECOND: PRECOND more than 2 times')
-          endif
-
-          if (POP_myTask == POP_masterTask) then
-            write(POP_stdout,'(a35,I2)') ' Solver EVP preconditioning START',EvpPreFlag
-          endif
-
-          call timer_start(timer_evpprep)
-
-          lcc(:,:,:,:) = 0.0
-          lne(:,:,:,:) = 0.0
-          ilcc(:,:,:,:) = 0.0
-          ilne(:,:,:,:) = 0.0
-          do bid=1,numBlocks
-            nx1 = POP_nxBlock-1
-            ny1 = POP_nyBlock-1
-            call evppre(btropWgtCenter(2:nx1,2:ny1,bid),btropWgtNE(2:nx1,2:ny1,bid),& 
-            rinv(:,:,:,bid,EvpPreFlag),landindx(:,:,bid,EvpPreFlag),POP_nxBlock-2,POP_nyBlock-2,EvpXbs,EvpYbs,EvpXbidx,EvpYbidx,EvpXnb,EvpYnb)
-
-            do j = 1, EvpYnb
-              js = EvpYbidx(j) 
-              je = EvpYbidx(j+1) +1
-              lm = (je-js) +1
-              do i = 1, EvpXnb
-                is = EvpXbidx(i) 
-                ie = EvpXbidx(i+1) +1
-                ln = (ie-is) +1
-                ib = (j-1)*EvpXnb+i
-                lcc(1:ln,1:lm,ib,bid) = btropWgtCenter(is:ie,js:je,bid)
-                lne(1:ln,1:lm,ib,bid) = btropWgtNE    (is:ie,js:je,bid)
-              end do 
-            end do 
-            where(lcc(:,:,:,bid) .ne. 0.0) 
-              ilcc(:,:,:,bid) = 1.0_POP_r8/lcc(:,:,:,bid)
-            end where
-            where(lne(:,:,:,bid) .ne. 0.0) 
-              ilne(:,:,:,bid) = 1.0_POP_r8/lne(:,:,:,bid)
-            end where
-
-          end do 
-          call timer_stop(timer_evpprep)
-
-          if (POP_myTask == POP_masterTask) then
-            write(POP_stdout,'(a35)') ' Solver EVP preconditioning END'
-          endif
-
-        endif
-      endif
-
-      if( (LanczosFirst .eq. 0) .and. (trim(solverChoice) .eq. solverChoiceCSI)  ) then
-        call POP_Barrier
-        call timer_start(timer_lanczos)
-        call lanczos(POP_nxBlock, POP_nyBlock, numBlocks, LanczosStep, csu, csv, errorCode)
-        call timer_stop(timer_lanczos)
-
-        if (POP_myTask == POP_masterTask) then 
-            write(POP_stdout,*) "Lanczos Step: ", LanczosStep
-            write(POP_stdout,*) "Lanczos eigenvalues: ", csu,csv
-        end if 
-        LanczosFirst = 1
-      endif 
-
-      call POP_Barrier
-      
-      call timer_start(timer_solver)
       select case(trim(solverChoice))
       case (solverChoicePCG)
 
@@ -439,7 +282,6 @@
          endif
 
       end select
-      call timer_stop(timer_solver)
    endif
 
 !-----------------------------------------------------------------------
@@ -577,28 +419,6 @@
       return
    endif
 
-   call POP_ConfigRead(configUnit, 'solvers', 'lanczos', &
-                       LanczosStep, 20, errorCode,           &
-                       outStringBefore = 'Lanczos step ',  &
-                       outStringAfter  = ' iterations')
-
-   if (errorCode /= POP_Success) then
-      call POP_ErrorSet(errorCode, &
-         'POP_SolversInit: error reading lanczos step')
-      return
-   endif
-!  call POP_ConfigRead(configUnit, 'solvers', 'convergenceCheckstart', &
-   call POP_ConfigRead(configUnit, 'solvers', 'convergencecheckstart', &
-                       convergenceCheckStart, 60, errorCode,           &
-                       outStringBefore = 'Check convergence start from ',  &
-                       outStringAfter  = ' iterations')
-
-   if (errorCode /= POP_Success) then
-      call POP_ErrorSet(errorCode, &
-         'POP_SolversInit: error reading convergence check start steps')
-      return
-   endif
-
 !  call POP_ConfigRead(configUnit, 'solvers', 'convergenceCheckFreq', &
    call POP_ConfigRead(configUnit, 'solvers', 'convergencecheckfreq', &
                        convergenceCheckFreq, 10, errorCode,           &
@@ -634,58 +454,6 @@
             'POP_SolversInit: error reading preconditioner file name')
          return
       endif
-   else if (trim(preconditionerChoice) == precondChoiceEvp) then
-      ! partition
-      ! Here take care of the halo update boundary. 
-      ! Here it is 2 as in HaloMod.F90
-      call POP_ConfigRead(configUnit, 'solvers', 'evpxblocksize', &
-                 EvpXbs, 8, errorCode,  &
-                 outStringBefore = 'EVP Xblocksize : ')
-
-      if (errorCode /= POP_Success) then
-         call POP_ErrorSet(errorCode, &
-            'POP_SolversInit: error reading EVP Xblocksize')
-         return
-      endif
-      call POP_ConfigRead(configUnit, 'solvers', 'evpyblocksize', &
-                 EvpYbs, 8, errorCode,  &
-                 outStringBefore = 'EVP Yblocksize : ')
-
-      if (errorCode /= POP_Success) then
-         call POP_ErrorSet(errorCode, &
-            'POP_SolversInit: error reading EVP Yblocksize')
-         return
-      endif
-      EvpXnb = (POP_nxBlock-5)/EvpXbs + 1
-      
-      allocate(EvpXbidx(EvpXnb+1))
-      call evpblockpartition(POP_nxBlock-2,EvpXbs,EvpXnb,EvpXbidx)
-
-      EvpYnb = (POP_nyBlock-5)/EvpYbs + 1
-      allocate(EvpYbidx(EvpYnb+1))
-      call evpblockpartition(POP_nyBlock-2,EvpYbs,EvpYnb,EvpYbidx)
-      
-      if (POP_myTask == POP_masterTask) then
-        write(POP_stdout,'(a35)') 'EVP block distribution'
-        write(POP_stdout,*) EvpXbidx(:)
-        write(POP_stdout,*) EvpYbidx(:)
-      endif
-
-      call POP_DistributionGet(POP_distrbTropic, errorCode, &
-                            numLocalBlocks = numBlocksTropic)
-      if (errorCode /= POP_Success) then
-         call POP_ErrorSet(errorCode, &
-            'POP_SolversInit: Error calling Distribution')
-         return
-      endif
-      i = EvpXbs + EvpYbs -1
-      allocate(rinv (i,i,EvpXnb*EvpYnb,numBlocksTropic,2))
-      allocate(landindx(EvpXnb,EvpYnb,numBlocksTropic,2))
-      allocate(lcc (EvpXbs+2,EvpYbs+2,EvpXnb*EvpYnb,numBlocksTropic))
-      allocate(lne (EvpXbs+2,EvpYbs+2,EvpXnb*EvpYnb,numBlocksTropic))
-      allocate(ilcc(EvpXbs+2,EvpYbs+2,EvpXnb*EvpYnb,numBlocksTropic))
-      allocate(ilne(EvpXbs+2,EvpYbs+2,EvpXnb*EvpYnb,numBlocksTropic))
-
    endif
 
    call POP_ConfigClose(configUnit, errorCode)
@@ -716,8 +484,6 @@
    select case (trim(preconditionerChoice))
    case(precondChoiceDiag)
       usePreconditioner = .false.   ! default is diagonal
-   case(precondChoiceEvp)
-      usePreconditioner = .true.
    case(precondChoiceFile)
       usePreconditioner = .true.
    case default
@@ -913,27 +679,27 @@
 
    if (usePreconditioner) then
 
-    !  call POP_ErrorSet(errorCode, &
-    !     'POP_SolversInit: preconditioner not supported')
-    !  return
+      call POP_ErrorSet(errorCode, &
+         'POP_SolversInit: preconditioner not supported')
+      return
 
-    !  allocate(                                                   &
-    !     precondCenter (POP_nxBlock,POP_nyBlock,numBlocksTropic), &
-    !     precondNorth  (POP_nxBlock,POP_nyBlock,numBlocksTropic), &
-    !     precondSouth  (POP_nxBlock,POP_nyBlock,numBlocksTropic), &
-    !     precondEast   (POP_nxBlock,POP_nyBlock,numBlocksTropic), &
-    !     precondWest   (POP_nxBlock,POP_nyBlock,numBlocksTropic), &
-    !     precondNE     (POP_nxBlock,POP_nyBlock,numBlocksTropic), &
-    !     precondSE     (POP_nxBlock,POP_nyBlock,numBlocksTropic), &
-    !     precondNW     (POP_nxBlock,POP_nyBlock,numBlocksTropic), &
-    !     precondSW     (POP_nxBlock,POP_nyBlock,numBlocksTropic), &
-    !     stat = istat)
+      allocate(                                                   &
+         precondCenter (POP_nxBlock,POP_nyBlock,numBlocksTropic), &
+         precondNorth  (POP_nxBlock,POP_nyBlock,numBlocksTropic), &
+         precondSouth  (POP_nxBlock,POP_nyBlock,numBlocksTropic), &
+         precondEast   (POP_nxBlock,POP_nyBlock,numBlocksTropic), &
+         precondWest   (POP_nxBlock,POP_nyBlock,numBlocksTropic), &
+         precondNE     (POP_nxBlock,POP_nyBlock,numBlocksTropic), &
+         precondSE     (POP_nxBlock,POP_nyBlock,numBlocksTropic), &
+         precondNW     (POP_nxBlock,POP_nyBlock,numBlocksTropic), &
+         precondSW     (POP_nxBlock,POP_nyBlock,numBlocksTropic), &
+         stat = istat)
 
-    !  if (istat > 0) then
-    !     call POP_ErrorSet(errorCode, &
-    !        'POP_SolversInit: error allocating preconditioner')
-    !     return
-    !  endif
+      if (istat > 0) then
+         call POP_ErrorSet(errorCode, &
+            'POP_SolversInit: error allocating preconditioner')
+         return
+      endif
 
 !****
 !**** OLD CODE FOR READING PRECONDITIONER - NEEDS TO BE REVISED
@@ -1059,17 +825,6 @@
          'POP_SolversInit: error deallocating temp mask')
       return
    endif
-
-   call get_timer(timer_haloupdate,'HALOUPDATE',1,distrb_clinic%nprocs)
-   call get_timer(timer_globalsum,'GLOBALSUM',1,distrb_clinic%nprocs)
-   call get_timer(timer_lanczos,'LANCZOS',1,distrb_clinic%nprocs)
-   call get_timer(timer_compute,'COMPUTE',1,distrb_clinic%nprocs)
-   call get_timer(timer_solver,'SOLVER',1,distrb_clinic%nprocs)
-   call get_timer(timer_evpprep,'EVPPREP',1,distrb_clinic%nprocs)
-   call get_timer(timer_precond,'PRECOND',1,distrb_clinic%nprocs)
-
-
-
 
 !-----------------------------------------------------------------------
 !EOC
@@ -1339,9 +1094,6 @@
       eta1 = POP_GlobalSum(work0, POP_distrbTropic, &
                            POP_gridHorzLocCenter,   &
                            errorCode, mMask = mMaskTropic)
-      !if (POP_myTask == POP_masterTask) then
-      !   write(POP_stdout,'(a20,3e15.6)') 'eta1, eta0, eta1/eta0',eta1, eta0,eta1/eta0
-      !endif
 
       if (errorCode /= POP_Success) then
          call POP_ErrorSet(errorCode, &
@@ -1414,7 +1166,7 @@
          end do
          end do
 
-         if ((mod(m,convergenceCheckFreq) == 0) .and. (m .ge.  convergenceCheckStart)) then
+         if (mod(m,convergenceCheckFreq) == 0) then
 
             call btropOperator(R,X,iblock)
             do j=1,ny
@@ -1434,7 +1186,7 @@
 !
 !-----------------------------------------------------------------------
 
-      if ((mod(m,convergenceCheckFreq) == 0) .and. (m .ge.  convergenceCheckStart)) then
+      if (mod(m,convergenceCheckFreq) == 0) then
 
          call POP_HaloUpdate(R, POP_haloTropic, POP_gridHorzLocCenter, &
                              POP_fieldKindScalar, errorCode)
@@ -1466,12 +1218,7 @@
 
    rmsResidual = sqrt(rr*residualNorm)
 
-   if (POP_myTask == POP_masterTask) then
-      write(POP_stdout,*) 'iter ', m, 'rr = ', rr
-   endif
-
    if (numIterations == maxIterations) then
-   !if (.true.) then
       if (convergenceCriterion /= 0.0_POP_r8) then
          call POP_ErrorSet(errorCode, &
             'POP_SolversPCG: solver not converged')
@@ -1530,14 +1277,14 @@
       numBlocks,       &! number of local blocks
       iblock            ! local block     counter
 
-  ! integer (POP_i4) :: &
-  !    FirstRunCsi	!  index of call number of CSI
+   integer (POP_i4) :: &
+      FirstRunCsi	!  index of call number of CSI
 
-  ! real (POP_r8),save ::          & 
-  !    scsu,scsv             ! csu, csv for saving 
+   real (POP_r8),save ::          & 
+      scsu,scsv             ! csu, csv for saving 
 
    real (POP_r8) ::          &
-      csalpha,csgamma, csbeta ,csomga,rr,  & ! scalar inner product results
+      csu,csv,csalpha,csgamma, csbeta ,csomga,rr,  & ! scalar inner product results
       normb,rr0, csc, csv1, exp_iter ! scalar inner product results
    
    real (POP_r8), dimension(2)::          &
@@ -1556,6 +1303,8 @@
 !
 !-----------------------------------------------------------------------
 
+   save FirstRunCsi
+   data FirstRunCsi /0/
 
    errorCode = POP_Success
 
@@ -1587,6 +1336,59 @@
       end do 
    endif
    
+   ! initiate u,v !edit by hy used only once!
+   if (FirstRunCsi == 0 ) then
+
+        !$OMP PARALLEL DO PRIVATE(iblock)
+        do iblock=1,numBlocks
+             WORK0(:,:,iblock) = 1.0_POP_r8
+             call BtropOperator(WORK1,WORK0,iblock)
+             call BtropOperatorAbs(S,WORK0,iblock)
+
+             if (usePreconditioner) then
+                 call preconditioner(work1,S,iblock)
+                 do j=1,ny
+                 do i=1,nx
+                     S(i,j,iblock) = work1(i,j,iblock)
+                 end do
+                 end do
+             else
+                 do j=1,ny
+                 do i=1,nx
+                    S(i,j,iblock) = S(i,j,iblock)*A0R(i,j,iblock)
+                 end do
+                 end do
+
+             endif
+        end do ! block loop
+        !$OMP END PARALLEL DO
+
+        uvsum(1) = POP_GlobalSum(work1, POP_distrbTropic, &
+             POP_gridHorzLocCenter,   &
+             errorCode, mMask = mMaskTropic)
+        uvsum(2) = POP_GlobalSum(btropWgtCenter, POP_distrbTropic, &
+             POP_gridHorzLocCenter,   &
+             errorCode, mMask = mMaskTropic)
+        scsv = uvsum(1)/uvsum(2)
+
+        scsu = POP_GlobalMaxval(S,POP_distrbTropic,errorCode, CALCU)
+
+        FirstRunCsi = 1
+        if (POP_myTask == POP_masterTask) then 
+            write(*,*) "Estimate eigenvalues: ", scsu, scsv
+        end if 
+
+        call lanczos(nx, ny, numBlocks, 12, scsu, scsv, errorCode)
+
+        if (POP_myTask == POP_masterTask) then 
+            write(*,*) "Lanczos eigenvalues: ", scsu,scsv
+        end if 
+
+   end if
+   ! end init u,v
+
+   csu = scsu 
+   csv = scsv 
 
 
    csalpha = 2.0_POP_r8/(csu-csv);
@@ -1602,7 +1404,6 @@
         end do
         end do
    end do 
-   !$OMP END PARALLEL DO
 
    call POP_HaloUpdate(R, POP_haloTropic, POP_gridHorzLocCenter, &
         POP_fieldKindScalar, errorCode)
@@ -1745,7 +1546,6 @@
    !-----------------------------------------------------------------------
 
    !if (mod(m,convergenceCheckFreq) == 0) then
-   !$OMP PARALLEL DO PRIVATE(iblock,i,j)
    do iblock=1,numBlocks
         do j=1,ny
         do i=1,nx
@@ -1753,7 +1553,6 @@
         end do 
         end do
    end do ! block loop
-   !$OMP END PARALLEL DO
 
    rr0 = POP_GlobalSum(work0, POP_distrbTropic, &
          POP_gridHorzLocCenter,   &
@@ -1775,7 +1574,6 @@
    elseif (m < maxIterations ) then 
        csomga = 1.0_POP_r8/(csgamma - csomga/(4.0_POP_r8*csalpha*csalpha))
 
-        !$OMP PARALLEL DO PRIVATE(iblock)
        do iblock=1,numBlocks
             if (usePreconditioner) then
                 call preconditioner(work1,R,iblock)
@@ -1814,7 +1612,6 @@
             POP_fieldKindScalar, errorCode)
 
 
-        !$OMP PARALLEL DO PRIVATE(iblock)
        do iblock=1,numBlocks
             do j=1,ny
             do i=1,nx
@@ -1822,7 +1619,6 @@
             end do 
             end do
        end do ! block loop
-       !$OMP END PARALLEL DO
 
        rr = POP_GlobalSum(work0, POP_distrbTropic, &
             POP_gridHorzLocCenter,   &
@@ -1910,6 +1706,11 @@
       numBlocks,       &! number of local blocks
       iblock            ! local block     counter
 
+   integer (POP_i4) :: &
+      FirstRunCsi	!  index of call number of CSI
+
+   real (POP_r8),save ::          &
+      csu,csv
 
    real (POP_r8) ::          &
       csalpha,csbeta,csy,csomga,rr ! scalar inner product results
@@ -1923,7 +1724,6 @@
       S,                 &! conjugate direction vector
       Q,work0,work1,      &! various cg intermediate results
       A0R
-   character GRD*2
 
 !-----------------------------------------------------------------------
 !
@@ -1931,8 +1731,9 @@
 !
 !-----------------------------------------------------------------------
 
+   save FirstRunCsi
+   data FirstRunCsi /0/
 
-   call timer_start(timer_compute)
    errorCode = POP_Success
 
    call POP_DistributionGet(POP_distrbTropic, errorCode, &
@@ -1951,7 +1752,6 @@
    if (.not. usePreconditioner) then
    
       !--- diagonal preconditioner if preconditioner not specified
-      !$OMP PARALLEL DO PRIVATE(iblock)
       do iblock=1,numBlocks
          do j=1,ny
          do i=1,nx
@@ -1963,10 +1763,62 @@
          end do
          end do
       end do 
-      !$OMP END PARALLEL DO
    endif
 
 
+   ! initiate u,v !edit by hy used only once!
+   if (FirstRunCsi == 0 ) then
+
+      !$OMP PARALLEL DO PRIVATE(iblock)
+      do iblock=1,numBlocks
+        WORK0(:,:,iblock) = 1.0_POP_r8
+        call BtropOperator(WORK1,WORK0,iblock)
+        call BtropOperatorAbs(S,WORK0,iblock)
+
+        if (usePreconditioner) then
+            call preconditioner(work1,S,iblock)
+            do j=1,ny
+            do i=1,nx
+                S(i,j,iblock) = work1(i,j,iblock)
+            end do
+            end do
+        else
+            do j=1,ny
+            do i=1,nx
+                S(i,j,iblock) = S(i,j,iblock)*A0R(i,j,iblock)
+            end do
+            end do
+
+        endif
+      end do ! block loop
+      !$OMP END PARALLEL DO
+
+      uvsum(1) = POP_GlobalSum(work1, POP_distrbTropic, &
+                    POP_gridHorzLocCenter,   &
+                    errorCode, mMask = mMaskTropic)
+      uvsum(2) = POP_GlobalSum(btropWgtCenter, POP_distrbTropic, &
+                    POP_gridHorzLocCenter,   &
+                    errorCode, mMask = mMaskTropic)
+      csv = uvsum(1)/uvsum(2)
+
+      csu = POP_GlobalMaxval(S,POP_distrbTropic,errorCode, CALCU)
+
+      FirstRunCsi = 1
+
+      if (POP_myTask == POP_masterTask) then 
+          write(*,*) "Estimate eigenvalues: ", csu, csv
+      end if 
+
+      call lanczos(nx, ny, numBlocks, 20, csu, csv, errorCode)
+
+      if (POP_myTask == POP_masterTask) then 
+          write(*,*) "Lanczos eigenvalues: ", csu,csv
+      end if 
+      !call POP_ErrorSet(errorCode, &
+      !      'POP_SolversCSI: break for check')
+    end if
+    ! end init u,v
+    
     
     csalpha = 2.0_POP_r8/(csu-csv);
     csbeta = (csu+csv)/(csu-csv);
@@ -1983,13 +1835,7 @@
             R(i,j,iblock) = B(i,j,iblock) - S(i,j,iblock)
         end do 
         end do 
-    end do ! block loop
-   !$OMP END PARALLEL DO
 
-   call timer_start(timer_precond)
-
-    !$OMP PARALLEL DO PRIVATE(iblock,i,j)
-    do iblock=1,numBlocks
         if (usePreconditioner) then
             call preconditioner(work1,R,iblock)
             do j=1,ny
@@ -2012,20 +1858,10 @@
         end do
     
     end do ! block loop
-   !$OMP END PARALLEL DO
-
-   call timer_stop(timer_precond)
-   call timer_stop(timer_compute)
-
-   call timer_start(timer_haloupdate)
     
     call POP_HaloUpdate(Q, POP_haloTropic, POP_gridHorzLocCenter, &
       POP_fieldKindScalar, errorCode)
-
-   call timer_stop(timer_haloupdate)
-   call timer_start(timer_compute)
-
-    !$OMP PARALLEL DO PRIVATE(iblock,i,j)
+    
     do iblock=1,numBlocks
       do j=1,ny
       do i=1,nx
@@ -2044,7 +1880,6 @@
     end do ! block loop
     
     !$OMP END PARALLEL DO
-   call timer_stop(timer_compute)
     
     !-----------------------------------------------------------------------
     !
@@ -2052,10 +1887,8 @@
     !
     !-----------------------------------------------------------------------
     
-   call timer_start(timer_haloupdate)
     call POP_HaloUpdate(R, POP_haloTropic, POP_gridHorzLocCenter, &
          POP_fieldKindScalar, errorCode)
-   call timer_stop(timer_haloupdate)
     
     if (errorCode /= POP_Success) then
         call POP_ErrorSet(errorCode, &
@@ -2072,11 +1905,7 @@
     !-----------------------------------------------------------------------
     
     iterationLoop: do m = 1, maxIterations
-
-
-    call timer_start(timer_compute)
-    call timer_start(timer_precond)
-
+    
     csomga = 1.0_POP_r8/(csy-csomga/(4.0_POP_r8*csalpha*csalpha))
 
     !$OMP PARALLEL DO PRIVATE(iblock)
@@ -2095,23 +1924,6 @@
           end do 
           end do
       endif 
-    end do ! block loop
-    !$OMP END PARALLEL DO
-  
-    call timer_stop(timer_precond)
-    call timer_stop(timer_compute)
-
-    if ( usePreconditioner) then
-    call timer_start(timer_haloupdate)
-    call POP_HaloUpdate(R, POP_haloTropic, POP_gridHorzLocCenter, &
-          POP_fieldKindScalar, errorCode)
-    call timer_stop(timer_haloupdate)
-    endif 
-
-    call timer_start(timer_compute)
-
-    !$OMP PARALLEL DO PRIVATE(iblock)
-    do iblock=1,numBlocks
     
       do j=1,ny
       do i=1,nx
@@ -2128,7 +1940,7 @@
       end do 
       end do
     
-      if ((mod(m,convergenceCheckFreq) == 0) .and. (m .ge.  convergenceCheckStart)) then
+      if (mod(m,convergenceCheckFreq) == 0) then
           do j=1,ny
           do i=1,nx
           WORK0(i,j,iblock) = R(i,j,iblock)*R(i,j,iblock)
@@ -2138,16 +1950,8 @@
     end do ! block loop
     !$OMP END PARALLEL DO
     
-   call timer_stop(timer_compute)
-   
-   if (.not. usePreconditioner) then
-      
-      call timer_start(timer_haloupdate)
-        ! halo updating every two iterations 
-      call POP_HaloUpdate(R, POP_haloTropic, POP_gridHorzLocCenter, &
-        POP_fieldKindScalar, errorCode)
-      call timer_stop(timer_haloupdate)
-   endif 
+    call POP_HaloUpdate(R, POP_haloTropic, POP_gridHorzLocCenter, &
+         POP_fieldKindScalar, errorCode)
     
     !-----------------------------------------------------------------------
     !
@@ -2155,14 +1959,15 @@
     !
     !-----------------------------------------------------------------------
     
-   if ((mod(m,convergenceCheckFreq) == 0) .and. (m .ge.  convergenceCheckStart)) then
+    if (mod(m,convergenceCheckFreq) == 0) then
     
-   call timer_start(timer_globalsum)
         rr = POP_GlobalSum(work0, POP_distrbTropic, &
         POP_gridHorzLocCenter,   &
         errorCode, mMask = mMaskTropic)   ! (r,r)
-   call timer_stop(timer_globalsum)
     
+        !if (POP_myTask == POP_masterTask) then 
+        !    write(*,*) "iter ", m, "rr = ", rr, convergenceCriterion
+        !endif 
         if (errorCode /= POP_Success) then
             call POP_ErrorSet(errorCode, &
             'POP_SolversCSI: error computing convergence dot prod')
@@ -2178,11 +1983,20 @@
     
     enddo iterationLoop
 
-    if (POP_myTask == POP_masterTask) then 
-        write(POP_stdout,*) 'iter ', m, 'rr = ', rr
-    endif 
+    !!!! to print iteration number 
+   if (POP_myTask == POP_masterTask) then
+      write(POP_stdout,*) 'numIteration  = ', numIterations
+   endif
     
     rmsResidual = sqrt(rr*residualNorm)
+    
+    if (numIterations == maxIterations) then
+        if (convergenceCriterion /= 0.0_POP_r8) then
+            call POP_ErrorSet(errorCode, &
+            'POP_SolversCSI: solver not converged')
+            return
+        endif
+    endif
 
 !-----------------------------------------------------------------------
 !EOC
@@ -2270,7 +2084,6 @@
 !
 !-----------------------------------------------------------------------
 
-   call timer_start(timer_compute)
    errorCode = POP_Success
 
 
@@ -2339,14 +2152,11 @@
       end do
       end do
    end do ! block loop
-   !$OMP END PARALLEL DO
 
-   call timer_stop(timer_compute)
-   call timer_start(timer_haloupdate)
+   !$OMP END PARALLEL DO
 
    call POP_HaloUpdate(R, POP_haloTropic, POP_gridHorzLocCenter, &
                           POP_fieldKindScalar, errorCode)
-   call timer_stop(timer_haloupdate)
 
    if (errorCode /= POP_Success) then
       call POP_ErrorSet(errorCode, &
@@ -2360,11 +2170,8 @@
 !
 !-----------------------------------------------------------------------
 
-
-   call timer_start(timer_compute)
-   call timer_start(timer_precond)
-
    !$OMP PARALLEL DO PRIVATE(iblock,i,j)
+
    do iblock=1,numBlocks
 
       !---- calculate (PC)r store in Z
@@ -2378,23 +2185,7 @@
          end do
       endif
 
-   end do
-   !$OMP END PARALLEL DO
-   call timer_stop(timer_precond)
-   call timer_stop(timer_compute)
 
-   call timer_start(timer_haloupdate)
-
-   if (usePreconditioner) then
-     call POP_HaloUpdate(Z, POP_haloTropic, POP_gridHorzLocCenter, &
-     POP_fieldKindScalar, errorCode)
-   end if
-   call timer_stop(timer_haloupdate)
-
-   call timer_start(timer_compute)
-
-   !$OMP PARALLEL DO PRIVATE(iblock,i,j)
-   do iblock=1,numBlocks
       !---- Compute intermediate result for dot product
       !---- update conjugate direction vector S
       do j=1,ny
@@ -2416,12 +2207,9 @@
 
    end do
    !$OMP END PARALLEL DO
-   call timer_stop(timer_compute)
-   call timer_start(timer_haloupdate)
 
    call POP_HaloUpdate(Q, POP_haloTropic, POP_gridHorzLocCenter, &
                           POP_fieldKindScalar, errorCode)
-   call timer_stop(timer_haloupdate)
 
 
    if (errorCode /= POP_Success) then
@@ -2431,14 +2219,11 @@
    endif
 
 
-   call timer_start(timer_globalsum)
    !---- Form dot products
    sumN = POP_GlobalSum(WORKN, POP_distrbTropic,        &
                                POP_gridHorzLocCenter,   &
                                errorCode, mMask = mMaskTropic)
-   call timer_stop(timer_globalsum)
 
-   call timer_start(timer_compute)
 
    if (errorCode /= POP_Success) then
       call POP_ErrorSet(errorCode, &
@@ -2463,7 +2248,6 @@
 
    end do
    !$OMP END PARALLEL DO
-   call timer_stop(timer_compute)
 
 !-----------------------------------------------------------------------
 !
@@ -2479,8 +2263,6 @@
 !
 !-----------------------------------------------------------------------
 
-      call timer_start(timer_compute)
-      call timer_start(timer_precond)
       !$OMP PARALLEL DO PRIVATE(iblock,i,j)
       do iblock=1,numBlocks
 
@@ -2491,26 +2273,10 @@
             do i=1,nx
                Z(i,j,iblock) = R(i,j,iblock)*A0R(i,j,iblock)
             end do
-          end do
-        endif
-      end do
-      !$OMP END PARALLEL DO
+            end do
+         endif
 
-      call timer_stop(timer_precond)
-      call timer_stop(timer_compute)
-
-      call timer_start(timer_haloupdate)
-      if (usePreconditioner) then
-        call POP_HaloUpdate(Z, POP_haloTropic, POP_gridHorzLocCenter, &
-        POP_fieldKindScalar, errorCode)
-      end if
-      call timer_stop(timer_haloupdate)
-      call timer_start(timer_compute)
-
-      !$OMP PARALLEL DO PRIVATE(iblock,i,j)
-      do iblock=1,numBlocks
-
-        call btropOperator(AZ,Z,iblock)
+         call btropOperator(AZ,Z,iblock)
 
          !--- intermediate results for inner products
 
@@ -2524,12 +2290,8 @@
       end do
       !$OMP END PARALLEL DO
 
-      call timer_stop(timer_compute)
-      call timer_start(timer_haloupdate)
-
       call POP_HaloUpdate(AZ, POP_haloTropic, POP_gridHorzLocCenter, &
                               POP_fieldKindScalar, errorCode)
-      call timer_stop(timer_haloupdate)
 
 
       if (errorCode /= POP_Success) then
@@ -2538,11 +2300,9 @@
          return
       endif
 
-      call timer_start(timer_globalsum)
       sumN = POP_GlobalSum(WORKN, POP_distrbTropic,        &
                                   POP_gridHorzLocCenter,   &
                                   errorCode, mMask = mMaskTropic)
-      call timer_stop(timer_globalsum)
 
 
       if (errorCode /= POP_Success) then
@@ -2564,7 +2324,6 @@
 !     compute next solution and residual
 !
 !-----------------------------------------------------------------------
-      call timer_start(timer_compute)
 
       !$OMP PARALLEL DO PRIVATE(iblock, i,j)
       do iblock=1,numBlocks
@@ -2579,7 +2338,7 @@
          end do
 
          !--- recompute residual as b-Ax for convergence check
-         if ((mod(m,convergenceCheckFreq) == 0) .and. (m .ge.  convergenceCheckStart)) then
+         if (mod(m,convergenceCheckFreq) == 0) then
 
             !--- Reset residual using r = b - Ax
             !--- (r,r) for norm of residual
@@ -2594,7 +2353,6 @@
          endif
       end do
       !$OMP END PARALLEL DO
-      call timer_stop(timer_compute)
 
 !-----------------------------------------------------------------------
 !
@@ -2602,13 +2360,11 @@
 !
 !-----------------------------------------------------------------------
 
-      if ((mod(m,convergenceCheckFreq) == 0) .and. (m .ge.  convergenceCheckStart)) then
+      if (mod(m,convergenceCheckFreq) == 0) then
 
          !--- update ghost cells for next iteration
-         call timer_start(timer_haloupdate)
          call POP_HaloUpdate(R, POP_haloTropic, POP_gridHorzLocCenter, &
-         POP_fieldKindScalar, errorCode)
-         call timer_stop(timer_haloupdate)
+                                POP_fieldKindScalar, errorCode)
 
          if (errorCode /= POP_Success) then
             call POP_ErrorSet(errorCode, &
@@ -2616,13 +2372,13 @@
             return
          endif
 
-         call timer_start(timer_globalsum)
          !--- residual norm for convergence 
          rr = POP_GlobalSum(work0, POP_distrbTropic,        &! (r,r)
                                    POP_gridHorzLocCenter,   &
                                    errorCode, mMask = mMaskTropic)
-         call timer_stop(timer_globalsum)
-
+	     !if (POP_myTask == POP_masterTask) then
+   	     !   write(POP_stdout,*) 'm = ', m, 'rr = ', rr
+   	     !endif
 
 
          if (errorCode /= POP_Success) then
@@ -2640,19 +2396,20 @@
 
    end do iterationLoop
 
+    !!!! to print iteration number 
    if (POP_myTask == POP_masterTask) then
-      write(POP_stdout,*) 'iter ', m, 'rr = ', rr
+      write(POP_stdout,*) 'numIteration  = ', numIterations
    endif
 
    rmsResidual = sqrt(rr*residualNorm)
 
    if (numIterations == maxIterations) then
-     if (convergenceCriterion /= 0.0_POP_r8) then
+      if (convergenceCriterion /= 0.0_POP_r8) then
 
-       call POP_ErrorSet(errorCode, &
-       'POP_SolversChronGear: solver not converged')
-       return
-     endif
+         call POP_ErrorSet(errorCode, &
+            'POP_SolversChronGear: solver not converged')
+         return
+      endif
    endif
 
 !-----------------------------------------------------------------------
@@ -2687,7 +2444,6 @@
    real (POP_r8), dimension(:,:,:), intent(out) :: &
       PX                  ! nine point operator result
 
-
 !EOP
 !BOC
 !-----------------------------------------------------------------------
@@ -2695,68 +2451,27 @@
 !  local variables
 !
 !-----------------------------------------------------------------------
-   real (POP_r8), dimension(EvpXbs+2,EvpYbs+2,EvpXnb*EvpYnb):: &
-      u,f                  ! nine point operator result
-   real (POP_r8), dimension(EvpXbs,EvpYbs,EvpXnb*EvpYnb):: &
-      tu
 
    integer (POP_i4) :: &
-      i,j,js,je,is,ie,lm,ln,l,nx1,ny1,ib               ! dummy counters
+      i,j                ! dummy counters
 
 !-----------------------------------------------------------------------
 
    PX(:,:,bid) = 0.0_POP_r8
 
-   nx1 = size(X,dim=1)-1
-   ny1 = size(X,dim=2)-1
-   !write(POP_stdout,'(a30)') 'EVPPRECOND input'
-   !write(POP_stdout,'(5e15.5)') X(:,:,bid)
-   
-   !call evpprecond(rinv(:,:,:,bid,EvpTimeStep),landindx(:,:,bid,EvpTimeStep),PX(2:nx1,2:ny1,bid),X(2:nx1,2:ny1,bid),nx1-1,ny1-1,EvpXbs,EvpYbs,EvpXbidx,EvpYbidx,EvpXnb,EvpYnb)
-
-  u = 0.0_POP_r8 
-  tu = 0.0_POP_r8 
-  f = 0.0_POP_r8 
-  do j = 1, EvpYnb
-    js = EvpYbidx(j)
-    je = EvpYbidx(j+1) +1
-    lm = (je-js) +1
-    do i = 1, EvpXnb
-      is = EvpXbidx(i) 
-      ie = EvpXbidx(i+1) +1
-      ln = (ie-is) +1
-      l  = ln + lm -5
-      ib = (j-1)*EvpXnb+i
-      f(2:ln-1,2:lm-1,ib) = X(is+1:ie-1,js+1:je-1,bid)
-      if (landindx(i,j,bid,EvpTimeStep) == 1 ) then 
-        ! diagonal preconditioning for land blocks
-        
-          tu(1:ln-2,1:lm-2,ib) = & 
-                    f(2:ln-1,2:lm-1,ib)*ilcc(2:ln-1,2:lm-1,ib,bid)
-
-      else if (landindx(i,j,bid,EvpTimeStep) == 0 ) then 
-        call expevp(lcc(1:ln,1:lm,ib,bid),lne(1:ln,1:lm,ib,bid),ilne(1:ln,1:lm,ib,bid),rinv(1:l,1:l,ib,bid,EvpTimeStep),u(1:ln,1:lm,ib),tu(1:ln-2,1:lm-2,ib),f(1:ln,1:lm,ib),ln,lm)
-
-      else 
-        write(POP_stdout,'(a35,3I5.3)') 'EVP Error: unpreconditioned block ',i,j,landindx(i,j,bid,EvpTimeStep)
-      end if 
-    end do 
-  end do 
-
-  do j = 1, EvpYnb
-    js = EvpYbidx(j)
-    je = EvpYbidx(j+1) +1
-    lm = (je-js) +1
-    do i = 1, EvpXnb
-      is = EvpXbidx(i) 
-      ie = EvpXbidx(i+1) +1
-      ln = (ie-is) +1
-      ib = (j-1)*EvpXnb+i
-      PX(is+1:ie-1,js+1:je-1,bid) = tu(1:ln-2,1:lm-2,ib)
-    end do 
-  end do 
-
-
+   do j=2,size(X,dim=2)-1
+   do i=2,size(X,dim=1)-1
+      PX(i,j,bid) = precondNE    (i,j,bid)*X(i+1,j+1,bid) + &
+                    precondNW    (i,j,bid)*X(i-1,j+1,bid) + &
+                    precondSE    (i,j,bid)*X(i+1,j-1,bid) + &
+                    precondSW    (i,j,bid)*X(i-1,j-1,bid) + &
+                    precondNorth (i,j,bid)*X(i  ,j+1,bid) + &
+                    precondSouth (i,j,bid)*X(i  ,j-1,bid) + &
+                    precondEast  (i,j,bid)*X(i+1,j  ,bid) + &
+                    precondWest  (i,j,bid)*X(i-1,j  ,bid) + &
+                    precondCenter(i,j,bid)*X(i  ,j  ,bid)
+   end do
+   end do
 
 !-----------------------------------------------------------------------
 !EOC
@@ -2887,295 +2602,13 @@
 
  end subroutine btropOperatorAbs
 
-subroutine evppre(cc,ne,rinv,landindx,n,m,nn,mm,ndi,mdi,nb,mb)
-  implicit none
-  integer,intent(in) :: n,m  ! total block size
-  integer,intent(in) :: nn,mm  ! small block ideal size
-  real(POP_r8),dimension(n,m),intent(in) :: cc,ne
-  real(POP_r8),dimension(nn+mm-1,nn+mm-1,nb*mb),intent(inout):: rinv
-  integer,dimension(nb,mb),intent(inout):: landindx
-  integer,intent(in) :: nb, mb  ! blocks on x and y direction 
-  integer,intent(in) :: ndi(nb+1),mdi(mb+1) ! bound index 
-
-  ! local 
-  integer :: i,j,is,ie,js,je,ln,lm,l,ib
-
-  do j = 1, mb
-    js = mdi(j)-1
-    je = mdi(j+1) 
-    lm = (je-js) +1
-    do i = 1, nb
-      is = ndi(i)-1
-      ie = ndi(i+1)
-      ln = (ie-is) +1
-      ib = (j-1)*nb+i
-      if(minval(abs(ne(is+1:ie-1,js+1:je-1))) == 0.0_POP_r8 ) then 
-        landindx(i,j) = 1
-        rinv(:,:,ib) = 0.0_POP_r8
-      else 
-        landindx(i,j) = 0
-        l  = ln + lm -5
-        !if (POP_myTask == POP_masterTask) then
-        !  write(POP_stdout,'(a35,2I5)') 'EVP preconditioning subblock ',i,j
-        !  write(POP_stdout,'(a35,5I5)') 'EVP preconditioning subblock ', &
-        !        is,ie,js,je,l
-        !endif
-        call exppre(cc(is:ie,js:je),ne(is:ie,js:je),rinv(1:l,1:l,ib),ln,lm)
-      end if 
-    end do 
-  end do 
-  write(POP_stdout,'(a8,I5,a15,2I5)') 'PROC',POP_myTask, ' land block :',nb*mb, sum(landindx)
-  !write(POP_stdout,*) landindx(:,:)
-
-end subroutine 
-
-!subroutine evpprecond(cc,ns,ew,ne,rinv,landindx,u,f,n,m,nn,mm,ndi,mdi,nb,mb)
-!  implicit none
-!  integer,intent(in) :: n,m  ! total block size
-!  real(POP_r8),dimension(n,m),intent(in) :: cc,ns,ew,ne,f
-!  real(POP_r8),dimension(n,m),intent(inout) :: u
-!  real(POP_r8),dimension(nn+mm-1,nn+mm-1,nb*mb),intent(in):: rinv
-!  integer,dimension(nb,mb),intent(in):: landindx
-!  integer,intent(in) :: nn,mm  ! small block ideal size
-!  integer,intent(in) :: nb, mb  ! blocks on x and y direction 
-!  integer,intent(in) :: ndi(nb+1),mdi(mb+1) ! bound index 
-!
-!  ! local 
-!  integer :: i,j,is,ie,js,je,ln,lm,l
-!  real(POP_r8),dimension(n,m) :: tu
-! 
-!  u = 0.0_POP_r8
-!  tu = 0.0_POP_r8 
-!  do i = 1, nb
-!    is = ndi(i) -1
-!    ie = ndi(i+1) 
-!    ln = (ie-is) +1
-!    do j = 1, mb
-!      js = mdi(j) -1
-!      je = mdi(j+1) 
-!      lm = (je-js) +1
-!      l  = ln + lm -5
-!      !if (POP_myTask == POP_masterTask) then
-!      !  !write(POP_stdout,'(a35,2I5.3)') 'EVP PRECOND block ',i,j
-!      !  !write(POP_stdout,'(a30,7I5.3)') 'EVP block size',is,ie,js,je,ln,lm,l
-!      !endif
-!      if (landindx(i,j) == 1 ) then 
-!        ! diagonal preconditioning for land blocks
-!        
-!        where(cc(is+1:ie-1,js+1:je-1) /= 0.0) 
-!          tu(is+1:ie-1,js+1:je-1) = & 
-!                    f(is+1:ie-1,js+1:je-1)/cc(is+1:ie-1,js+1:je-1)
-!        end where
-!
-!      else if (landindx(i,j) == 0 ) then 
-!        call expevp(cc(is:ie,js:je),ns(is:ie,js:je),ew(is:ie,js:je),ne(is:ie,js:je),rinv(1:l,1:l,(i-1)*mb+j),u(is:ie,js:je),tu(is+1:ie-1,js+1:je-1),f(is:ie,js:je),ln,lm)
-!
-!      else 
-!        write(POP_stdout,'(a35,3I5.3)') 'EVP Error: unpreconditioned block ',i,j,landindx(i,j)
-!      end if 
-!    end do 
-!  end do 
-!  do i = 1, nb
-!    is = ndi(i) -1
-!    ie = ndi(i+1) 
-!    do j = 1, mb
-!      js = mdi(j)-1 
-!      je = mdi(j+1) 
-!      u(is+1:ie-1,js+1:je-1) = tu(is+1:ie-1,js+1:je-1)
-!    end do 
-!  end do 
-!  
-!
-!  end subroutine 
-
-subroutine exppre(cc,ne,rinv,n,m)
-  implicit none
-  integer,intent(in) :: n,m
-  real(POP_r8),dimension(n,m),intent(in) :: cc,ne
-
-  real(POP_r8),dimension(n +m -5,n +m -5),intent(inout) :: rinv
-
-  !local 
-  integer :: i,j,k,ii,info
-  integer :: nm 
-  real(POP_r8),dimension(n,m) :: y
-  real(POP_r8),dimension(n +m -5,n +m -5) :: work,ipiv
-  real(POP_r8),dimension(n +m -5,n +m -5) :: rin
-  real(POP_r8),dimension(n +m -5) :: r
-
-  nm = n +m -5
-  y(:,:) = 0.0_POP_r8
-  ! left 
-  do ii = 1,m-2
-    y(2,m-ii) = 1.0_POP_r8
-    do j = 2, m-1
-      do i = 2, n-1
-        y(i+1,j+1)  = (- cc(i,j)     * y(i,j )     & 
-               -  ne(i,j-1)   * y(i+1,j-1)  &
-               -  ne(i-1,j)   * y(i-1,j+1)  & 
-               -  ne(i-1,j-1) * y(i-1,j-1) ) /ne(i,j) 
-      end do
-    end do
-    ! get F error
-    
-    do i = 1,n-2
-      rinv(ii,i) = -y(i+2,m)
-    end do 
-
-    do j = 1,m-3
-      rinv(ii,n-2+j) = -y(n,m-j)
-    end do 
-
-    y(2,m-ii) = 0.0_POP_r8
-  end do 
-  ! buttom
-  do ii = 1,n-3
-    y(ii+2,2) = 1.0_POP_r8
-    do j = 2, m-1
-      do i = 2, n-1
-        y(i+1,j+1)  = (- cc(i,j)     * y(i,j )     & 
-               -  ne(i,j-1)   * y(i+1,j-1)  &
-               -  ne(i-1,j)   * y(i-1,j+1)  & 
-               -  ne(i-1,j-1) * y(i-1,j-1) ) /ne(i,j) 
-      end do
-    end do
-    ! get F error
-    
-    do i = 1,n-2
-      rinv(m-2+ii,i) = -y(i+2,m)
-    end do 
-
-    do j = 1,m-3
-      rinv(m-2+ii,n-2+j) = -y(n,m-j)
-    end do 
-
-    y(ii+2,2) = 0.0_POP_r8
-  end do 
-
-  rin(:,:) = rinv(:,:)
-  work(:,:) = rinv(:,:)
-  call inverse(rin,rinv,nm)
-
-  !write(POP_stdout,'(a10)') 'rinv'
-  !write(POP_stdout,'(5f18.5)') rinv(:,:)
-
-  !! check pre rinv 
-  rin(:,:) = 0.0_POP_r8
-  do j = 1,nm
-    do i = 1,nm
-      do k = 1,nm
-        rin(i,j) = rin(i,j) + rinv(i,k)*work(k,j)
-      end do 
-      if (i == j ) then 
-        if (abs(rin(i,j) -1.0) > 1.0e-8 ) then 
-          write(POP_stdout,*) 'fail in pre',i,j,rin(i,j)-1.0
-        endif 
-      else
-        if (abs(rin(i,j) -0.0) > 1.0e-8 ) then 
-          write(POP_stdout,*) 'fail in pre',i,j,rin(i,j)
-        endif 
-      endif 
-    end do 
-  end do 
-  !write(*,*) 'work'
-  !write(*,*) rin(:,:)
-
-end subroutine 
-subroutine expevp(cc,ne,ine,rinv,u,tu,f,n,m)
-  implicit none
-  integer (POP_i4) :: n,m
-  real(POP_r8),dimension(n,m),intent(in) :: cc,ne,ine
-  real(POP_r8),dimension(n,m),intent(in) :: f
-  real(POP_r8),dimension(n,m),intent(in) :: u
-  real(POP_r8),dimension(n-2,m-2),intent(inout) :: tu
-
-  real(POP_r8),dimension(n+m-5,n+m-5),intent(in) :: rinv
-
-  !local 
-  integer :: i,j,k,nm
-  real(POP_r8),dimension(n,m) :: y
-  real(POP_r8),dimension(n+m-5) :: r
-
-  nm = n+m-5
-  y(:,:) = u(:,:) 
-  !y(2:n-1,2) = y(2:n-1,1)
-  !y(2,3:m-1) = y(1,3:m-1)
-  do j = 2, m-1
-    do i = 2, n-1
-        y(i+1,j+1)  = (f(i,j)- cc(i,j)     * y(i,j )     & 
-               -  ne(i,j-1)   * y(i+1,j-1)  &
-               -  ne(i-1,j)   * y(i-1,j+1)  & 
-               -  ne(i-1,j-1) * y(i-1,j-1) ) *ine(i,j) 
-    end do
-  end do
-
-  !do i = 1,n-2
-  !  r(i) = y(i+2,m)-u(i+2,m)
-  !end do 
-  r(1:n-2) = y(3:n,m)-u(3:n,m)
-
-  !do j = 1,m-3
-  !  r(n-2+j) = y(n,m-j) -u(n,m-j)
-  !end do 
-  r(n-1:n+m-5) = y(n,m-1:3:-1) -u(n,m-1:3:-1)
-
-  do j = 1,m-2
-      do k = 1,nm
-        y(2,m-j)  = y(2,m-j) + rinv(k,j)*r(k)
-      end do 
-  end do 
-  do i = 1,n-3
-      do k = 1,nm
-        y(i+2,2)  = y(i+2,2) + rinv(k,m-2+i)*r(k)
-      end do 
-  end do 
-
-
-  do j = 2, m-2
-    do i = 2, n-2
-        y(i+1,j+1)  = (f(i,j)- cc(i,j)     * y(i,j )     & 
-               -  ne(i,j-1)   * y(i+1,j-1)  &
-               -  ne(i-1,j)   * y(i-1,j+1)  & 
-               -  ne(i-1,j-1) * y(i-1,j-1) ) *ine(i,j) 
-      end do
-  end do
-  tu(1:n-2,1:m-2) = y(2:n-1,2:m-1) 
-  !
-  !y(:,:) = u(:,:)
-  !y(2:n-1,2:m-1) = tu(1:n-2,1:m-2) 
-  
-  !rr = 0.0_POP_r8
-
-  !do j = 2, m-2
-  !  do i = 2, n-2
-  !    ry(i,j) = f(i,j)- cc(i,j)     * y(i,j )     & 
-  !             -  ns(i,j)     * y(i,j+1)    &
-  !             -  ns(i,j-1)   * y(i,j-1)    &
-  !             -  ew(i,j)     * y(i+1,j)    &
-  !             -  ew(i-1,j)   * y(i-1,j)    &
-  !             -  ne(i,j-1)   * y(i+1,j-1)  &
-  !             -  ne(i-1,j)   * y(i-1,j+1)  & 
-  !             -  ne(i-1,j-1) * y(i-1,j-1)  &
-  !             -  ne(i,j)     * y(i+1,j+1)
-  !    rr = rr + ry(i,j)
-  !  end do
-  !end do
-  !if ( rr > 1.0) then 
-  ! write(POP_stdout,'(a10,I5,a15,f27.9)') 'PROC ',POP_myTask,'EVP rr ',rr
-   !write(POP_stdout,'(a30)') 'EVP PRECOND NE'
-   !write(POP_stdout,'(5e15.5)') ne(:,:)
-   !write(POP_stdout,'(a30)') 'EVP PRECOND RINV'
-   !write(POP_stdout,'(5e15.5)') rinv(:,:)
-  !end if 
-
-end subroutine 
 
 !-----------------------------------------------------------------------
 !
 ! function needed by Chebyshev iteration method
 !
 !-----------------------------------------------------------------------
-function cheb(i,x)
+ function cheb(i,x)
 
     integer (POP_i4),intent(in) :: i
     real (POP_r8), intent(in) :: x
@@ -3187,9 +2620,9 @@ function cheb(i,x)
 	cheb = cosh(i*acosh(x))
     endif
 
-end function cheb
+ end function cheb
 !***********************************************************************
-subroutine lanczos(nx, ny, nb, lstep, u, v, errorCode)
+ subroutine lanczos(nx, ny, nb, lstep, u, v, errorCode)
 
 ! !DESCRIPTION:
 ! ! This lanczos method is used to estimate the max and min eigenvalues for
@@ -3226,8 +2659,26 @@ subroutine lanczos(nx, ny, nb, lstep, u, v, errorCode)
         csa,csb,csc
 
    errorCode = POP_Success
-   
-   ! compute diagonal inverse
+
+
+   if (errorCode /= POP_Success) then
+      call POP_ErrorSet(errorCode, &
+         'POP_SolversPCG: error retrieving local block count')
+      return
+   endif
+
+   do iblock=1,nb
+      do j=1,ny
+      do i=1,nx
+        R(i,j,iblock) = 1.0_POP_r8
+        P(i,j,iblock) = 0.0_POP_r8
+      end do
+      end do
+   end do ! block loop
+
+   csc = POP_GlobalSum(R, POP_distrbTropic, &
+         POP_gridHorzLocCenter,   &
+         errorCode, mMask = mMaskTropic)
    do iblock=1,nb
       do j=1,ny
       do i=1,nx
@@ -3236,59 +2687,10 @@ subroutine lanczos(nx, ny, nb, lstep, u, v, errorCode)
         else
            A0R(i,j,iblock) = 0.0_POP_r8
         endif
+        Q(i,j,iblock) = (1.0_POP_r8/sqrt(csc))*R(i,j,iblock)
       end do
       end do
    end do ! block loop
-
-   ! set initial R
-   do iblock=1,nb
-      do j=1,ny
-      do i=1,nx
-        R(i,j,iblock) = 1.0_POP_r8
-        P(i,j,iblock) = 0.0_POP_r8
-        Q(i,j,iblock) = 0.0_POP_r8
-      end do
-      end do
-   end do ! block loop
-
-   do iblock=1,nb
-        if (usePreconditioner) then
-            call preconditioner(work1,R,iblock)
-        else
-            do j=1,ny
-            do i=1,nx
-                work1(i,j,iblock) = R(i,j,iblock)*A0R(i,j,iblock)
-            end do 
-            end do 
-        endif 
-        do j=1,ny
-        do i=1,nx
-            WORK(i,j,iblock) = WORK1(i,j,iblock)*R(i,j,iblock)
-        end do
-        end do
-   end do ! block loop
-
-
-   csc =- POP_GlobalSum(WORK, POP_distrbTropic, &
-         POP_gridHorzLocCenter,   &
-         errorCode, mMask = mMaskTropic)
-   if (csc .gt. 0.0_POP_r8) then 
-      do iblock=1,nb
-        do j=1,ny
-          do i=1,nx
-            Q(i,j,iblock) = (1/sqrt(csc))*R(i,j,iblock)
-          end do 
-        end do 
-      end do ! block loop
-   else 
-
-      call POP_ErrorSet(errorCode, &
-         'POP_Lanczos: error estimating in lanczos: b == 0 !!!')
-      return
-   endif 
-
-   call POP_HaloUpdate(Q, POP_haloTropic, POP_gridHorzLocCenter, &
-                          POP_fieldKindScalar, errorCode)
 
    csb= 0.0_POP_r8
    u= 0.0_POP_r8
@@ -3297,30 +2699,33 @@ subroutine lanczos(nx, ny, nb, lstep, u, v, errorCode)
 
    m_iter: do m = 1, lstep
    do iblock=1,nb
+        call btropOperator(WORK,Q,iblock)
         if (usePreconditioner) then
-            call preconditioner(WORK,Q,iblock)
+            call preconditioner(work1,WORK,iblock)
+            do j=1,ny
+            do i=1,nx
+                WORK(i,j,iblock) = work1(i,j,iblock)
+            end do
+            end do
         else
             do j=1,ny
             do i=1,nx
-                WORK(i,j,iblock) = Q(i,j,iblock)*A0R(i,j,iblock)
+                work(i,j,iblock) = WORK(i,j,iblock)*A0R(i,j,iblock)
             end do 
             end do 
         endif 
-   end do ! block loop
-    call POP_HaloUpdate(WORK, POP_haloTropic, POP_gridHorzLocCenter, &
-                          POP_fieldKindScalar, errorCode)
-   do iblock=1,nb
-        call btropOperator(WORK1,WORK,iblock)
         
         do j=1,ny
         do i=1,nx
-            R(i,j,iblock) =  WORK1(i,j,iblock)-csb*P(i,j,iblock)
-            WORK1(i,j,iblock) = WORK(i,j,iblock)*R(i,j,iblock)
+            R(i,j,iblock) =  WORK(i,j,iblock)-csb*P(i,j,iblock)
+            WORK(i,j,iblock) = Q(i,j,iblock)*R(i,j,iblock)
         end do
         end do
    end do ! block loop
 
-    csa = -POP_GlobalSum(work1, POP_distrbTropic, &
+    call POP_HaloUpdate(R, POP_haloTropic, POP_gridHorzLocCenter, &
+                          POP_fieldKindScalar, errorCode)
+    csa = POP_GlobalSum(work, POP_distrbTropic, &
           POP_gridHorzLocCenter,   &
           errorCode, mMask = mMaskTropic)   ! (r,r)
 
@@ -3328,30 +2733,12 @@ subroutine lanczos(nx, ny, nb, lstep, u, v, errorCode)
       do j=1,ny
       do i=1,nx
         R(i,j,iblock) = R(i,j,iblock)-csa*Q(i,j,iblock)
+        WORK(i,j,iblock) = R(i,j,iblock)*R(i,j,iblock)
       end do
       end do 
    end do 
-   call POP_HaloUpdate(R, POP_haloTropic, POP_gridHorzLocCenter, &
-                          POP_fieldKindScalar, errorCode)
-   ! preconditioning R 
-   do iblock=1,nb
-        if (usePreconditioner) then
-            call preconditioner(WORK,R,iblock)
-        else
-            do j=1,ny
-            do i=1,nx
-                WORK(i,j,iblock) = R(i,j,iblock)*A0R(i,j,iblock)
-            end do 
-            end do 
-        endif 
-        do j=1,ny
-        do i=1,nx
-          WORK1(i,j,iblock) = WORK(i,j,iblock)*R(i,j,iblock)
-        end do
-        end do 
-   end do ! block loop
 
-   csc = -POP_GlobalSum(work1, POP_distrbTropic, &
+   csc = POP_GlobalSum(work, POP_distrbTropic, &
           POP_gridHorzLocCenter,   &
           errorCode, mMask = mMaskTropic)   ! (r,r)
    csb = sqrt(csc)
@@ -3374,8 +2761,8 @@ subroutine lanczos(nx, ny, nb, lstep, u, v, errorCode)
           end do 
           end do 
        end do ! block loop
-       if (POP_myTask == POP_masterTask) &
-       write(POP_stdout,*) "lanczos1 :", m,"  ",csa,"  ",csb
+       !if (POP_myTask == POP_masterTask) &
+       !write(*,*) "lanczos1 :", m,"  ",csa,"  ",csb
 
    else 
 
@@ -3409,7 +2796,7 @@ subroutine lanczos(nx, ny, nb, lstep, u, v, errorCode)
    call dsterf(lstep, mcsa, mcsb, info)
    v = mcsa(1)
    if (POP_myTask == POP_masterTask) then
-       write(POP_stdout,*) "lanczos eigs:", mcsa(1), ":", mcsa(lstep)
+       write(*,*) "lanczos eigs:", mcsa(1), ":", mcsa(lstep)
    endif 
    deallocate(mcsa, mcsb)
 
@@ -3417,110 +2804,6 @@ subroutine lanczos(nx, ny, nb, lstep, u, v, errorCode)
 !EOC
 
  end subroutine lanczos
-
-subroutine evpblockpartition(m,mm,mb,mdi)
-implicit none  
-integer, intent(in) :: m,mm
-integer, intent(in) :: mb
-integer, dimension(mb+1),intent(inout) :: mdi
-!local 
-integer :: i
-
- mdi(1) = 2 
- if ( mb == 1 ) then 
-   mdi(mb+1) = m
- else 
-   do i = 1, mb-2
-     mdi(i+1) = 2+i*mm
-   end do 
-   mdi(mb) = (mdi(mb-1) +m )/2 
-   mdi(mb+1) = m
- end if 
- end subroutine 
-subroutine inverse(a,c,n)
-  !============================================================
-  ! Inverse matrix
-  ! Method: Based on Doolittle LU factorization for Ax=b
-  ! Alex G. December 2009
-  !-----------------------------------------------------------
-  ! input ...
-  ! a(n,n) - array of coefficients for matrix A
-  ! n      - dimension
-  ! output ...
-  ! c(n,n) - inverse matrix of A
-  ! comments ...
-  ! the original matrix a(n,n) will be destroyed 
-  ! during the calculation
-  !===========================================================
-  implicit none 
-  integer,intent(in) ::  n
-  real(POP_r8),intent(inout) :: a(n,n)
-  real(POP_r8),intent(inout) :: c(n,n)
-  real(POP_r8) :: L(n,n), U(n,n), b(n), d(n), x(n)
-  real(POP_r8) :: coeff
-  integer::  i, j, k
-
-  ! step 0: initialization for matrices L and U and b
-  ! Fortran 90/95 aloows such operations on matrices
-  L=0.0
-  U=0.0
-  b=0.0
-
-  ! step 1: forward elimination
-  do k=1, n-1
-    do i=k+1,n
-      coeff=a(i,k)/a(k,k)
-      L(i,k) = coeff
-      do j=k+1,n
-        a(i,j) = a(i,j)-coeff*a(k,j)
-      end do
-    end do
-  end do
-
-  ! Step 2: prepare L and U matrices 
-  ! L matrix is a matrix of the
-  ! elimination coefficient
-  ! + the diagonal elements are 1.0
-  do i=1,n
-    L(i,i) = 1.0
-  end do
-  ! U matrix is the upper triangular
-  ! part of A
-  do j=1,n
-    do i=1,j
-      U(i,j) = a(i,j)
-    end do
-  end do
-
-  ! Step 3: compute
-  ! columns of the inverse
-  ! matrix C
-  do k=1,n
-    b(k)=1.0
-    d(1) = b(1)
-    ! Step 3a: Solve Ld=b using the forward substitution
-    do i=2,n
-      d(i)=b(i)
-      do j=1,i-1
-        d(i)=d(i)-L(i,j)*d(j)
-      end do
-    end do
-    ! Step 3b:Solve Ux=d using the back substitution
-    x(n)=d(n)/U(n,n)
-    do i = n-1,1,-1
-      x(i) = d(i)
-      do j=n,i+1,-1
-        x(i)=x(i)-U(i,j)*x(j)
-      end do
-      x(i) = x(i)/u(i,i)
-    end do
-    ! Step  3c: fill the solutions  x(n) into column  k  of  C
-    do  i=1,n
-      c(i,k) = x(i)
-    end do
-    b(k)=0.0
-  end do 
-end subroutine
 
  end module POP_SolversMod
 
