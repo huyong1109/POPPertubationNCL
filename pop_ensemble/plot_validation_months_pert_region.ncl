@@ -14,7 +14,7 @@ Reg  = (/"90S-60S","60S-30S","30S-30N","30N-60N","60N-90N"/)
 nReg = dimsizes(Reg)
 pref  ="./validation_region/validationtest-"
 suf  ="-41cases.log "
-y = new((/nvars,npert,ntime,nReg/),"float")
+y = new((/nvars,npert+2,ntime,nReg/),"float")
   do m = 0,ntime-1
   do n =0,nvars-1
   do k =0,npert-1
@@ -24,6 +24,7 @@ y = new((/nvars,npert,ntime,nReg/),"float")
   end do
   end do
 
+  y(:,npert:npert+1,:,:) = asciiread(pref+"-ens"+suf,(/nvars,2,ntime,nReg/),"float")
   ;;; special case for SSH
 
   print(y)
@@ -36,7 +37,7 @@ do i = 0, nvars-1
 ; plotting parameters
 ;************************************************
 do iReg = 0,nReg -1
-wks   = gsn_open_wks ("PNG",vars(i)+"-RMSZ-ensemble41-month-pert-"+Reg(iReg))                  ; open workstation
+wks   = gsn_open_wks ("png",vars(i)+"-RMSZ-ensemble41-month-pert-"+Reg(iReg))                  ; open workstation
 gsn_define_colormap(wks,"amwg")
 
 res                   = True                      ; plot mods desired

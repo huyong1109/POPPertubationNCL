@@ -20,16 +20,17 @@ fT     = addfile (filename, "r")
 cntf     = addfile (filecnt, "r")
 lon2d = cntf->ULONG
 lat2d = cntf->ULAT
-RegLat = (/0,36,92,273,339/)
+;RegLat = (/0,36,92,273,339/)
 data   = fT->ens_stddev2d(0,:,:)
-data1    = data
-data  = 0
-data(RegLat(3):RegLat(4)-1,:)  =data1(RegLat(3):RegLat(4)-1,:)
+;data1    = data
+;data  = 0
+;data(RegLat(3):RegLat(4)-1,:)  =data1(RegLat(3):RegLat(4)-1,:)
 
 data@lon2d = lon2d
 data@lat2d = lat2d
 
-mmax = max(data)
+;mmax = max(data)
+mmax = 0.4
 wks   = gsn_open_wks ("X11","SSH_std_mon"+mon(imon));
 
 res                   = True                      ; plot mods desired
@@ -47,7 +48,7 @@ res@pmLegendDisplayMode     = "Always"
     res@cnLevelSelectionMode = "Manuallevels"
     res@cnMinLevelValF = -mmax
     res@cnMaxLevelValF = mmax
-    res@cnLevelSpacingF = mmax/5.5
+    res@cnLevelSpacingF = mmax/20.5
     res@cnFillPalette = "BlWhRe"
     res@gsnAddCyclic = True       ; add longitude cyclic point to avoid the white line
 
