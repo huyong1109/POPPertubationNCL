@@ -1054,10 +1054,10 @@ id="solverChoice"
 type="char*256"
 category="solvers"
 group="solvers"
-valid_values="pcg,ChronGear,csi,ast" >
+valid_values="pcg,ChronGear,pcsi" >
 Solver to use for elliptic system for surface pressure in barotropic mode.
 
-Valid Values: 'pcg', 'ChronGear'
+Valid Values: 'pcg', 'ChronGear,PCSI'
 Default: 'ChronGear'
 </entry>
 
@@ -1144,11 +1144,21 @@ Default: 8
 </entry>
 
 <entry 
-id="Lanczos"
+id="LanczosconvergenceCriterion"
+type="real"
+category="solvers"
+group="solvers" >
+Convergence error criterion for lanczos step.
+
+Default:  0.1
+</entry>
+
+<entry 
+id="maxLanczosStep"
 type="integer"
 category="solvers"
 group="solvers" >
-Lanczos Steps
+Maximum Lanczos Steps
 
 Default: 20
 </entry>

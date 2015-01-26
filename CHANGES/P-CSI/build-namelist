@@ -691,7 +691,8 @@ add_default($nl, 'preconditionerChoice');
 add_default($nl, 'preconditionerFile');
 add_default($nl, 'EvpXblocksize');
 add_default($nl, 'EvpYblocksize');
-add_default($nl, 'lanczos');
+add_default($nl, 'lanczosconvergenceCriterion');
+add_default($nl, 'maxLanczosStep');
     
 ##########################################
 # namelist group: vertical_mix_nml       #
