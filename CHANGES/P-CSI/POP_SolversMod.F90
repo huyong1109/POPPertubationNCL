@@ -78,12 +78,14 @@
       EVPrinv!      EVP influence matrix
 
    real (POP_r8), dimension (:,:,:,:,:), allocatable, public :: & 
-      EVPcenterWgt, InvEVPcenterWgt      ! reshape coefficients into block 
+      EVPcenterWgt,        &! reshape coefficients into block 
+      InvEVPcenterWgt       ! save inverse for computation efficiency
    real (POP_r8), dimension (:,:,:,:), allocatable, public :: & 
-      EVPneWgt, InvEVPneWgt   ! not related timestep
+      EVPneWgt,            &! not related timestep
+      InvEVPneWgt           ! save inverse for computation efficiency
 
    integer (POP_i4),dimension(:,:,:,:),allocatable :: &
-      landindx                      ! index of land EVP blocks 
+      landindx              ! index of land EVP blocks 
 
 !EOP
 !BOC
@@ -137,17 +139,17 @@
       timer_compute,        &! timer for barotropic part  of step
       timer_evpprep,        &! timer for evp preprocessing
       timer_solver,         &! timer for evp preprocessing
-      timer_precond         ! timer for evp preconditioning
+      timer_precond          ! timer for evp preconditioning
 
 
    integer (POP_i4) ::      &
       maxIterations,        &! max number of solver iterations
-      convergenceCheckStart,&! start checking convergence from given steps
+      convergenceCheckStart,&! start checking from given steps
       convergenceCheckFreq   ! check convergence every freq steps
 
    real (POP_r8) ::         &
       convergenceCriterion, &! convergence error criterion
-      LanczosconvergenceCriterion, &! Lanczos convergence error criterion
+      LanczosconvergenceCriterion, &! Lanczos convergence criterion
       residualNorm           ! residual normalization
 
    !*** convergence diagnostics
@@ -167,20 +169,22 @@
 !-----------------------------------------------------------------------
 
    real (POP_r8),dimension(2), save ::          & 
-      PcsiMaxEigs,PcsiMinEigs                ! eigenvalues for P-CSI method
+      PcsiMaxEigs,         &! eigenvalues for P-CSI method
+      PcsiMinEigs           ! smallest eigenvalue
 
    integer (POP_i4),save :: &
       TropicDtInd	   =  1   !  index of different barotropic timesteps 
 
    integer(POP_i4)  :: &
-      EVPXbs, EVPYbs        ! EVP block size along latitude and longitude 
+      EVPXbs,              &! EVP block size along longitude
+      EVPYbs                ! EVP block size along latitude
 
    integer (POP_i4) :: &
-      MaxLanczosStep        ! Max lanczos steps used to get eigenvalues 
+      MaxLanczosStep        ! Max lanczos steps to get eigenvalues 
 
    integer (POP_i4) :: &
-      EVPXnb,          &    ! sub block number along latitude
-      EVPYnb                ! sub block number along longitude
+      EVPXnb,          &    ! sub block number along longitude
+      EVPYnb                ! sub block number along latitude
 
    integer (POP_i4),dimension(:),allocatable :: &
       EVPXbidx,          &  ! index of sub blocks start point 
@@ -225,17 +229,18 @@
 !-----------------------------------------------------------------------
 
    integer (POP_i4) :: &
-      numBlocks           ! number of blocks in barotropic distrib
-   integer (POP_i4) :: &
-      bid,i,j,nx1,ny1,is,js,ie,je,lm,ln,ib           ! number of processors in barotropic distrib
+      numBlocks,          &! number of blocks in barotropic distrib
+      bid,i,j,            &! local counters
+      nx1,ny1,            &! POP_nxBlock -1
+      is,js,ie,je,        &! start and end index for EVP sub block
+      lm,ln,              &! EVP sub block size
+      ib                   ! index of sub block
 
    logical (POP_logical),dimension(2), save ::    &
-      PreInitialFlag = (/.false., .false./)          ! flag for initializing 
+      PreInitialFlag = (/.false., .false./)  ! flag for initializing 
 
    real (POP_r8), dimension(2),save :: &
-      histc2dtp = (/0.0_POP_r8,0.0_POP_r8/)
-
-
+      histc2dtp = (/0.0_POP_r8,0.0_POP_r8/)  ! save timestep for in
 
 
 
@@ -244,23 +249,33 @@
    call POP_DistributionGet(POP_distrbTropic, errorCode, &
                             numLocalBlocks = numBlocks)
   
-   ! adjust index of timestep
-   ! Here we assume that only two kinds of timestep (full timestep and half
-   ! timesep ) will be used! 
-   if( PreInitialFlag(TropicDtInd) .and. (c2dtp /=  histc2dtp(TropicDtInd))) then
+!-----------------------------------------------------------------------
+!
+!   Adjust index of timestep
+!   Here we assume that only two kinds of timestep 
+!   (full timestep and half timesep ) will be used! 
+!
+!-----------------------------------------------------------------------
+   if( PreInitialFlag(TropicDtInd) .and. &
+                              (c2dtp /=  histc2dtp(TropicDtInd))) then
      TropicDtInd = mod(TropicDtInd,2) +1
      write(POP_stdout,'(a35,I2)') ' Solver Timestep Stamp ',TropicDtInd
    endif 
 
    ! if not initialized, then 
    if (.not. PreInitialFlag(TropicDtInd)) then
-      histc2dtp(TropicDtInd) = c2dtp   ! save timestep to inspect timestep change
+      histc2dtp(TropicDtInd) = c2dtp   ! save timestep for inspecting
 
-      ! if use EVP preconditioner, then do EVP preprocessing
+!-----------------------------------------------------------------------
+!
+!   EVP preprocessing
+!
+!-----------------------------------------------------------------------
       if (usePreconditioner) then
 
           if (POP_myTask == POP_masterTask) then
-            write(POP_stdout,'(a50,I2)') ' Solver EVP preconditioning START Timestep Stamp ',TropicDtInd
+            write(POP_stdout,'(a50,I2)')  & 
+              'Solver EVP preconditioning START TimeStamp ',TropicDtInd
           endif
 
           call timer_start(timer_evpprep)
@@ -269,12 +284,15 @@
           InvEVPcenterWgt(:,:,:,:,:) = 0.0
           EVPneWgt(:,:,:,:) = 0.0
           InvEVPneWgt(:,:,:,:) = 0.0
+
           do bid=1,numBlocks
             nx1 = POP_nxBlock-1
             ny1 = POP_nyBlock-1
-            call EVPPre(btropWgtCenter(2:nx1,2:ny1,bid),btropWgtNE(2:nx1,2:ny1,bid),& 
-            EVPrinv(:,:,:,bid,TropicDtInd),landindx(:,:,bid,TropicDtInd),POP_nxBlock-2,POP_nyBlock-2,EVPXbs,EVPYbs,EVPXbidx,EVPYbidx,EVPXnb,EVPYnb)
-
+            call EVPPre(btropWgtCenter(2:nx1,2:ny1,bid),btropWgtNE(2:nx1,2:ny1,bid),&
+                        EVPrinv(:,:,:,bid,TropicDtInd),landindx(:,:,bid,TropicDtInd), &
+                        POP_nxBlock-2,POP_nyBlock-2,EVPXbs,EVPYbs,EVPXbidx,EVPYbidx,EVPXnb,EVPYnb)
+            
+            ! Reshape coefficents into EVP sub-blocks  for efficiency
             do j = 1, EVPYnb
               js = EVPYbidx(j) 
               je = EVPYbidx(j+1) +1
@@ -284,12 +302,16 @@
                 ie = EVPXbidx(i+1) +1
                 ln = (ie-is) +1
                 ib = (j-1)*EVPXnb+i
-                EVPcenterWgt(1:ln,1:lm,ib,bid,TropicDtInd) = btropWgtCenter(is:ie,js:je,bid)
-                EVPneWgt(1:ln,1:lm,ib,bid) = btropWgtNE    (is:ie,js:je,bid)
+                EVPcenterWgt(1:ln,1:lm,ib,bid,TropicDtInd) = &
+                                      btropWgtCenter(is:ie,js:je,bid)
+                EVPneWgt(1:ln,1:lm,ib,bid) = btropWgtNE(is:ie,js:je,bid)
               end do 
             end do 
+
+            ! Save inverse of coefficents for efficiency
             where(EVPcenterWgt(:,:,:,bid,TropicDtInd) .ne. 0.0) 
-              InvEVPcenterWgt(:,:,:,bid,TropicDtInd) = 1.0_POP_r8/EVPcenterWgt(:,:,:,bid,TropicDtInd)
+              InvEVPcenterWgt(:,:,:,bid,TropicDtInd) = &
+                          1.0_POP_r8/EVPcenterWgt(:,:,:,bid,TropicDtInd)
             end where
             where(EVPneWgt(:,:,:,bid) .ne. 0.0)
               InvEVPneWgt(:,:,:,bid) = 1.0_POP_r8/EVPneWgt(:,:,:,bid)
@@ -304,26 +326,25 @@
 
       endif
 
-      ! if P-CSI method is choosen, call lanczos function to compute eigenvalues
-      call POP_Barrier
-      write(POP_stdout,*) 'start lanczos if needed'
-      if (POP_myTask == POP_masterTask) then 
-          write(POP_stdout,*) POP_nxBlock, POP_nyBlock, numBlocks, MaxLanczosStep, TropicDtInd
-          write(POP_stdout,*) PcsiMaxEigs, PcsiMinEigs
-          write(POP_stdout,*) solverChoice, solverChoicePCSI
-      end if 
-      call POP_Barrier
+   
+!-----------------------------------------------------------------------
+!
+! call lanczos function to compute eigenvalues for P-CSI
+!
+!-----------------------------------------------------------------------
 
       if(trim(solverChoice) .eq. solverChoicePCSI) then
         call POP_Barrier
         call timer_start(timer_lanczos)
-        call PcsiLanczos(POP_nxBlock, POP_nyBlock, numBlocks, MaxLanczosStep, PcsiMaxEigs(TropicDtInd), PcsiMinEigs(TropicDtInd), errorCode)
+        call PcsiLanczos(POP_nxBlock, POP_nyBlock, numBlocks, &
+                    MaxLanczosStep, PcsiMaxEigs(TropicDtInd), &
+                    PcsiMinEigs(TropicDtInd), errorCode)
         call timer_stop(timer_lanczos)
         call POP_Barrier
 
         if (POP_myTask == POP_masterTask) then 
-            write(POP_stdout,*) "Lanczos Step: ", MaxLanczosStep
-            write(POP_stdout,*) "Lanczos eigenvalues: ", PcsiMaxEigs,PcsiMinEigs
+            write(POP_stdout,*) "Lanczos Maxeigs: ", PcsiMaxEigs
+            write(POP_stdout,*) "Lanczos Mineigs: ", PcsiMinEigs
         end if 
       endif 
 
@@ -638,7 +659,7 @@
    endif
 !-----------------------------------------------------------------------
 !
-! Read in Pcsi and EVP configure parameters
+! Read in Lanczos parameters for P-CSI
 !
 !-----------------------------------------------------------------------
 
@@ -1414,9 +1435,6 @@
       eta1 = POP_GlobalSum(work0, POP_distrbTropic, &
                            POP_gridHorzLocCenter,   &
                            errorCode, mMask = mMaskTropic)
-      !if (POP_myTask == POP_masterTask) then
-      !   write(POP_stdout,'(a20,3e15.6)') 'eta1, eta0, eta1/eta0',eta1, eta0,eta1/eta0
-      !endif
 
       if (errorCode /= POP_Success) then
          call POP_ErrorSet(errorCode, &
@@ -1489,7 +1507,7 @@
          end do
          end do
 
-         if ((mod(m,convergenceCheckFreq) == 0) .and. (m .ge.  convergenceCheckStart)) then
+         if ((mod(m,convergenceCheckFreq) == 0).and.(m.ge.convergenceCheckStart)) then
 
             call btropOperator(R,X,iblock)
             do j=1,ny
@@ -1509,7 +1527,7 @@
 !
 !-----------------------------------------------------------------------
 
-      if ((mod(m,convergenceCheckFreq) == 0) .and. (m .ge.  convergenceCheckStart)) then
+      if ((mod(m,convergenceCheckFreq) == 0) .and. (m.ge.convergenceCheckStart)) then
 
          call POP_HaloUpdate(R, POP_haloTropic, POP_gridHorzLocCenter, &
                              POP_fieldKindScalar, errorCode)
@@ -1567,8 +1585,8 @@
  subroutine pcsi(X,B,errorCode)  
 
 ! !DESCRIPTION:
-!  This routine implements the Preconditioned Classical Stiefel Iteration (P-CSI)
-!  solver with preconditioner for solving the linear system $Ax=b$.
+!  This routine implements the Preconditioned Classical Stiefel Iteration 
+!  (P-CSI)  solver with preconditioner for solving the linear system $Ax=b$.
 !  It utilizes the two extreme eigenvalues of $A$ instead of the norm of
 !  residual. Thus it eliminates global reductions in each iteration.
 !  The eigenvalues are estimated by routine PcsiLanczos.
@@ -1579,9 +1597,9 @@
 !     Stiefel, E. L. (1958). Kernel polynomial in linear algebra and their
 !        numerical applications, in: Further contributions to the determination of
 !        eigenvalues. NBS Applied Math. Ser., 49, 1-22.
-!     Hu, Y., Huang, X., Wang, X., Fu, H., Xu, S., Ruan, H., ... & Yang, G. (2013). A
-!        scalable barotropic mode solver for the parallel ocean program. In Euro-Par 2013
-!        Parallel Processing (pp. 739-750). Springer Berlin Heidelberg.
+!     Hu, Y., Huang, X., Wang, X., Fu, H., Xu, S., Ruan, H., ... & Yang, G. (2013). 
+!     A scalable barotropic mode solver for the parallel ocean program. In Euro-Par
+!     2013  Parallel Processing (pp. 739-750). Springer Berlin Heidelberg.
 !
 ! !REVISION HISTORY:
 !  this routine implemented by Yong Hu, et al., Tsinghua University
@@ -1673,10 +1691,11 @@
 
 
     
-    csalpha = 2.0_POP_r8/(PcsiMaxEigs(TropicDtInd)-PcsiMinEigs(TropicDtInd));
-    csbeta = (PcsiMaxEigs(TropicDtInd)+PcsiMinEigs(TropicDtInd))/(PcsiMaxEigs(TropicDtInd)-PcsiMinEigs(TropicDtInd));
-    csy = csbeta/csalpha;
-    csomga = 2.0_POP_r8/csy;
+    csalpha = 2.0_POP_r8/(PcsiMaxEigs(TropicDtInd)-PcsiMinEigs(TropicDtInd))
+    csbeta = (PcsiMaxEigs(TropicDtInd)+PcsiMinEigs(TropicDtInd))/ &
+             (PcsiMaxEigs(TropicDtInd)-PcsiMinEigs(TropicDtInd))
+    csy = csbeta/csalpha
+    csomga = 2.0_POP_r8/csy
     
     
     !$OMP PARALLEL DO PRIVATE(iblock,i,j)
@@ -1833,7 +1852,7 @@
       end do 
       end do
     
-      if ((mod(m,convergenceCheckFreq) == 0) .and. (m .ge.  convergenceCheckStart)) then
+      if ((mod(m,convergenceCheckFreq) == 0) .and. (m.ge.convergenceCheckStart)) then
           do j=1,ny
           do i=1,nx
           WORK0(i,j,iblock) = R(i,j,iblock)*R(i,j,iblock)
@@ -1860,7 +1879,7 @@
     !
     !-----------------------------------------------------------------------
     
-   if ((mod(m,convergenceCheckFreq) == 0) .and. (m .ge.  convergenceCheckStart)) then
+   if ((mod(m,convergenceCheckFreq) == 0) .and. (m.ge.convergenceCheckStart)) then
     
    call timer_start(timer_globalsum)
         rr = POP_GlobalSum(work0, POP_distrbTropic, &
@@ -2289,7 +2308,7 @@
          end do
 
          !--- recompute residual as b-Ax for convergence check
-         if ((mod(m,convergenceCheckFreq) == 0) .and. (m .ge.  convergenceCheckStart)) then
+         if ((mod(m,convergenceCheckFreq) == 0) .and. (m.ge.convergenceCheckStart)) then
 
             !--- Reset residual using r = b - Ax
             !--- (r,r) for norm of residual
@@ -2312,7 +2331,7 @@
 !
 !-----------------------------------------------------------------------
 
-      if ((mod(m,convergenceCheckFreq) == 0) .and. (m .ge.  convergenceCheckStart)) then
+      if ((mod(m,convergenceCheckFreq) == 0) .and. (m.ge.convergenceCheckStart)) then
 
          !--- update ghost cells for next iteration
          call timer_start(timer_haloupdate)
@@ -2405,9 +2424,11 @@
 !
 !-----------------------------------------------------------------------
    real (POP_r8), dimension(EVPXbs+2,EVPYbs+2,EVPXnb*EVPYnb):: &
-      u,f                  ! nine point operator result
+      u,              &! reshaped input, save interface for different 
+                      !boundary conditions
+      f               ! reshaped X
    real (POP_r8), dimension(EVPXbs,EVPYbs,EVPXnb*EVPYnb):: &
-      tu
+      tu              ! output array for EVP 
 
    integer (POP_i4) :: &
       i,j,js,je,is,ie,lm,ln,l,nx1,ny1,ib               ! dummy counters
@@ -2454,20 +2475,26 @@
            ib = (j-1)*EVPXnb+i
            f(2:ln-1,2:lm-1,ib) = X(is+1:ie-1,js+1:je-1,bid)
            if (landindx(i,j,bid,TropicDtInd) == 1 ) then 
-             ! diagonal preconditioning for land blocks
 
+             ! diagonal preconditioning for blocks containing land potins
              tu(1:ln-2,1:lm-2,ib) = & 
              f(2:ln-1,2:lm-1,ib)*InvEVPcenterWgt(2:ln-1,2:lm-1,ib,bid,TropicDtInd)
 
            else if (landindx(i,j,bid,TropicDtInd) == 0 ) then 
-             call ExplicitEVP(EVPcenterWgt(1:ln,1:lm,ib,bid,TropicDtInd),EVPneWgt(1:ln,1:lm,ib,bid),InvEVPneWgt(1:ln,1:lm,ib,bid),EVPrinv(1:l,1:l,ib,bid,TropicDtInd),u(1:ln,1:lm,ib),tu(1:ln-2,1:lm-2,ib),f(1:ln,1:lm,ib),ln,lm)
+
+             ! EVP solver on sub-blocks
+             call ExplicitEVP(EVPcenterWgt(1:ln,1:lm,ib,bid,TropicDtInd),&
+                              EVPneWgt(1:ln,1:lm,ib,bid),InvEVPneWgt(1:ln,1:lm,ib,bid),&
+                              EVPrinv(1:l,1:l,ib,bid,TropicDtInd),u(1:ln,1:lm,ib),&
+                              tu(1:ln-2,1:lm-2,ib),f(1:ln,1:lm,ib),ln,lm)
 
            else 
-             write(POP_stdout,'(a35,3I5.3)') 'EVP Error: unpreconditioned block ',i,j,landindx(i,j,bid,TropicDtInd)
+             write(POP_stdout,'(a35,3I5.3)') 'EVP Error: unpreconditioned block ',&
+                                             i,j,landindx(i,j,bid,TropicDtInd)
            end if 
          end do 
        end do 
-
+      ! copy back results from sub-blocks to barotrpic blocks
       do j = 1, EVPYnb
         js = EVPYbidx(j)
         je = EVPYbidx(j+1) +1
@@ -2577,50 +2604,56 @@
        else 
          landindx(i,j) = 0
          l  = ln + lm -5
-         call ExplicitBlockEVPPre(cc(is:ie,js:je),ne(is:ie,js:je),rinv(1:l,1:l,ib),ln,lm)
+         call ExplicitBlockEVPPre(cc(is:ie,js:je),ne(is:ie,js:je), &
+                                  rinv(1:l,1:l,ib),ln,lm)
        end if 
      end do 
    end do 
-   write(POP_stdout,'(a8,I5,a15,2I5)') 'PROC',POP_myTask, ' land block :',nb*mb, sum(landindx)
+   write(POP_stdout,'(a8,I5,a15,2I5)') 'PROC',POP_myTask, & 
+                                ' land block :',nb*mb, sum(landindx)
    !write(POP_stdout,*) landindx(:,:)
 
   end subroutine 
   
   subroutine ExplicitBlockEVPPre(cc,ne,rinv,n,m)
 ! !DESCRIPTION:
-!  This routine implements the preprocessing of explicit EVP method for solve a 
-!  a nine point elliptic equation on sub blocks.
-!  Four coefficients related to north, south, east and west are 
-!  small compared with the rest five coefficients, thus ignored here to reduce computation
+!  This routine implements the preprocessing of explicit EVP method for
+!  solve a nine point elliptic equation on sub blocks.
+!  Four coefficients related to north, south, east and west are small compared 
+!  with the rest five coefficients, thus ignored here to reduce computation.
 !
 !  References:
-!     Roache, P. J. (1995). Elliptic marching methods and domain decomposition (Vol.
-!        5). CRC press.
+!     Roache, P. J. (1995). Elliptic marching methods and domain
+!        decomposition (Vol.5). CRC press.
 !
 ! !REVISION HISTORY:
 !  this routine implemented by Yong Hu, et al., Tsinghua University
  
  ! !INPUT PARAMETERS:
-   integer,intent(in) :: n,m        ! 
-   real(POP_r8),dimension(n,m),intent(in) :: cc,ne
+   integer,intent(in) :: n,m                      !sub-block size [n,m]
+   real(POP_r8),dimension(n,m),intent(in) :: cc   !center coefficients
+   real(POP_r8),dimension(n,m),intent(in) :: ne   !four corners coefficients
 
-   real(POP_r8),dimension(n +m -5,n +m -5),intent(inout) :: rinv
+ ! !OUTPUT PARAMETERS:
+   real(POP_r8),dimension(n+m-5,n+m-5),intent(inout) :: rinv !preconditioning matrix
 
  ! LOCAL VARIABLES
    integer :: i,j,k,ii,info
-   integer :: nm 
-   integer (POP_i4):: &
-       errorCode          ! returned error code
-   real(POP_r8),dimension(n,m) :: y
-   real(POP_r8),dimension(n +m -5) :: work
-   integer ,dimension(n +m -5) :: ipiv
+   integer :: nm                          ! length of error and final vectors
+   integer (POP_i4)::  errorCode          ! returned error code
+   real(POP_r8),dimension(n,m) :: y       ! temporary array
+
+   ! call BLAS lib to compute inverse
+   real(POP_r8),dimension(n +m -5) :: WORK
+   integer ,dimension(n +m -5) :: IPIV
    real(POP_r8),dimension(n +m -5,n +m -5) :: rin,work1
    real(POP_r8):: maxvalr
    real(POP_r8),dimension(n +m -5) :: r
 
    nm = n +m -5
    y(:,:) = 0.0_POP_r8
-   ! left 
+
+   ! five points marching from left initial error vectors 
    do ii = 1,m-2
      y(2,m-ii) = 1.0_POP_r8
      do j = 2, m-1
@@ -2631,8 +2664,8 @@
                 -  ne(i-1,j-1) * y(i-1,j-1) ) /ne(i,j) 
        end do
      end do
-     ! get F error
-     
+
+     ! get the final error vector f
      do i = 1,n-2
        rinv(ii,i) = -y(i+2,m)
      end do 
@@ -2643,7 +2676,8 @@
 
      y(2,m-ii) = 0.0_POP_r8
    end do 
-   ! buttom
+   
+   ! five points marching from bottom inital error vectors
    do ii = 1,n-3
      y(ii+2,2) = 1.0_POP_r8
      do j = 2, m-1
@@ -2654,8 +2688,8 @@
                 -  ne(i-1,j-1) * y(i-1,j-1) ) /ne(i,j) 
        end do
      end do
-     ! get F error
      
+     ! get the final error vector f
      do i = 1,n-2
        rinv(m-2+ii,i) = -y(i+2,m)
      end do 
@@ -2669,23 +2703,22 @@
 
    rin(:,:) = rinv(:,:)
    work1(:,:) = rinv(:,:)
-   !call inverse(rin,rinv,nm)
+
+   ! call BLAS lib to do LU decomposition first
    call DGETRF(nm,nm,rinv,nm,IPIV,info)
    if (info .ne. 0) then
      call POP_ErrorSet(errorCode, &
-     'POP_EXPPR: error in computing the inverse of rinv')
+     'POP_EXPLICITPRE: error in computing the inverse matrix (LU)')
      return
    endif 
 
+   ! call BLAS lib to compute the inverse matrix
    call DGETRI(nm,rinv,nm,IPIV,WORK,nm,info)
    if (info .ne. 0) then
      call POP_ErrorSet(errorCode, &
-     'POP_EXPLICITPRE: error in computing the inverse of rinv')
+     'POP_EXPLICITPRE: error in computing the inverse matrix (INV)')
      return
    endif 
-
-   !write(POP_stdout,'(a10)') 'rinv'
-   !write(POP_stdout,'(5f18.5)') rinv(:,:)
 
    !! check pre rinv 
    rin(:,:) = 0.0_POP_r8
@@ -2700,49 +2733,56 @@
      end do 
    end do 
    maxvalr = maxval(abs(rin))
-   write(POP_stdout,*) "MAXVAL(RINV*RIN) = ", maxvalr
+   !write(POP_stdout,*) "MAXVAL(RINV*RIN) = ", maxvalr
    if (maxvalr > 1.0e-8 ) then 
      write(POP_stdout,*) 'maxvalr ', maxvalr
      call POP_ErrorSet(errorCode, &
-     'POP_EXPLICITPRE: error in computing the inverse of rinv > 1.0e-8')
+     'POP_EXPLICITPRE: error in computing the inverse, error > 1.0e-8 ;&
+      Check EVP sub-block size!')
      return
    end if 
-   !write(*,*) 'work'
-   !write(*,*) rin(:,:)
 
   end subroutine 
+
   subroutine ExplicitEVP(cc,ne,ine,rinv,u,tu,f,n,m)
 ! !DESCRIPTION:
 !  This routine implements the EVP method to explicitly solve a 
 !  a nine point elliptic equation on sub blocks.
 !  Four coefficients related to north, south, east and west are 
-!  small compared with the rest five coefficients, thus ignored here to reduce computation
+!  small compared with the rest five coefficients, thus ignored 
+!  here to reduce computation
 !
 !  References:
-!     Roache, P. J. (1995). Elliptic marching methods and domain decomposition (Vol.
-!        5). CRC press.
+!     Roache, P. J. (1995). Elliptic marching methods and domain 
+!        decomposition (Vol.5). CRC press.
 !
 ! !REVISION HISTORY:
 !  this routine implemented by Yong Hu, et al., Tsinghua University
  
  ! !INPUT PARAMETERS:
-   integer (POP_i4) :: n,m
-   real(POP_r8),dimension(n,m),intent(in) :: cc,ne,ine
-   real(POP_r8),dimension(n,m),intent(in) :: f
-   real(POP_r8),dimension(n,m),intent(in) :: u
-   real(POP_r8),dimension(n-2,m-2),intent(inout) :: tu
- 
+   integer(POP_i4),intent(in) :: n,m                    !sub-block size [n,m]
+   real(POP_r8),dimension(n,m),intent(in) :: cc,&! center weight
+                                             ne,&! northeast weight
+                                             ine ! inverse of ne
+   real(POP_r8),dimension(n,m),intent(in) :: f   ! residual 
+   real(POP_r8),dimension(n,m),intent(in) :: u   ! save interface
    real(POP_r8),dimension(n+m-5,n+m-5),intent(in) :: rinv
+                                                 ! preconditioning matrx
+
+ ! !OUTPUT PARAMETERS:
+   real(POP_r8),dimension(n-2,m-2),intent(inout) :: tu ! solution
+ 
  
    !local 
-   integer :: i,j,k,nm
-   real(POP_r8),dimension(n,m) :: y
-   real(POP_r8),dimension(n+m-5) :: r,re
+   integer(POP_i4) :: i,j,k       ! local counters
+   integer(POP_i4) :: nm          ! length of initial and final error
+   real(POP_r8),dimension(n,m) :: y ! temporary array
+   real(POP_r8),dimension(n+m-5) :: r !final error vector
  
    nm = n+m-5
    y(:,:) = u(:,:) 
-   !y(2:n-1,2) = y(2:n-1,1)
-   !y(2,3:m-1) = y(1,3:m-1)
+   
+   ! marching from left and bottom intial error vectors 
    do j = 2, m-1
      do i = 2, n-1
          y(i+1,j+1)  = (f(i,j)- cc(i,j)     * y(i,j )     & 
@@ -2752,9 +2792,11 @@
      end do
    end do
  
+   ! get right and top final error vectors
    r(1:n-2) = y(3:n,m)-u(3:n,m)
    r(n-1:n+m-5) = y(n,m-1:3:-1) -u(n,m-1:3:-1)
  
+   !compute intial error 
    do j = 1,m-2
        do k = 1,nm
          y(2,m-j)  = y(2,m-j) + rinv(k,j)*r(k)
@@ -2767,6 +2809,7 @@
    end do 
  
  
+   !marching again based on the adjusted intial vector
    do j = 2, m-2
      do i = 2, n-2
          y(i+1,j+1)  = (f(i,j)- cc(i,j)     * y(i,j )     & 
@@ -2775,6 +2818,8 @@
                 -  ne(i-1,j-1) * y(i-1,j-1) ) *ine(i,j) 
        end do
    end do
+
+   !copy results 
    tu(1:n-2,1:m-2) = y(2:n-1,2:m-1) 
  
   end subroutine 
@@ -2832,9 +2877,10 @@
       iblock                    ! local block counter
  
    real (POP_r8) :: &
-        csa,                   &! inner product (p,r)
-        csb,                   &! inner product (r,s)
-        csc                     ! 
+        csa,                   &! inner product alpha = (p,r)
+        csb,                   &! inner product beta = (r,s)
+        csc                     ! vector magnitude  ||r0||_A
+
    ! CALL BLAS LIB TO COMPUTE TWO EXTREME EIGENVALUES
    integer (POP_i4) :: &
       IL,IU,MEIGS,NSPLIT
@@ -2846,7 +2892,7 @@
       EIGS,EWORK,EIWORK
 
    real (POP_r8) :: & 
-        MAXEIG,MINEIG 
+        MAXEIG,MINEIG   
 
  
    errorCode = POP_Success
@@ -2875,7 +2921,7 @@
       end do
    end do ! block loop
    
-   ! s = M^{-1}r 
+   ! preconditioning s = M^{-1}r 
    do iblock=1,nb
         if (usePreconditioner) then
             call preconditioner(S,R,iblock)
@@ -2893,10 +2939,10 @@
         end do
    end do ! block loop
  
-   ! (R,S)  $A$ and $M$  in negative defined 
+   ! (R,S)  $A$ and $M$  is negative defined 
    csc =- POP_GlobalSum(WORK, POP_distrbTropic, &
-         POP_gridHorzLocCenter,   &
-         errorCode, mMask = mMaskTropic)
+              POP_gridHorzLocCenter,   &
+              errorCode, mMask = mMaskTropic)
 
    ! q = R/||R||_{AM}  normalize R based on measurement of $AM^{-1}$
    if (csc .gt. 0.0_POP_r8) then 
@@ -2929,11 +2975,7 @@
 !-----------------------------------------------------------------------
    lanczos_iter: do m = 1, maxlanczosstep
 
-!-----------------------------------------------------------------------
-!
-!  preconditioning q
-!
-!-----------------------------------------------------------------------
+   !  preconditioning q
    do iblock=1,nb
         if (usePreconditioner) then
             call preconditioner(P,Q,iblock)
@@ -2947,6 +2989,8 @@
    end do ! block loop
     call POP_HaloUpdate(P, POP_haloTropic, POP_gridHorzLocCenter, &
                           POP_fieldKindScalar, errorCode)
+
+   ! r = Mp - beta_{j-1} q_{j-1}
    do iblock=1,nb
         call btropOperator(WORK1,P,iblock)
         
@@ -2961,7 +3005,8 @@
     csa = -POP_GlobalSum(WORK, POP_distrbTropic, &
           POP_gridHorzLocCenter,   &
           errorCode, mMask = mMaskTropic)   ! (r,r)
- 
+   
+   ! r = r - alpha*q 
    do iblock=1,nb
       do j=1,ny
       do i=1,nx
@@ -2990,19 +3035,22 @@
    end do ! block loop
  
    csc = -POP_GlobalSum(WORK, POP_distrbTropic, &
-          POP_gridHorzLocCenter,   &
-          errorCode, mMask = mMaskTropic)   ! (r,r)
+                POP_gridHorzLocCenter,   &
+                errorCode, mMask = mMaskTropic)   ! (r,s)
    csb = sqrt(csc)
  
    vcsa(m) = csa
    vcsb(m) = csb
- 
+   
+
+   ! Gershgorin circle theroem to esitimate the largest eigenvaule 
    if (m ==1 ) then
     u = vcsa(1) + vcsb(1)
    else 
     u = max(u, vcsa(m) + vcsb(m) + vcsb(m-1))
    end if
- 
+
+   ! normalize r  : q = r/||r||_A
    if (csb /= 0.0_POP_r8) then 
       do iblock=1,nb
          do j=1,ny
@@ -3012,15 +3060,17 @@
           end do 
           end do 
        end do ! block loop
-       !if (POP_myTask == POP_masterTask) &
-       !write(POP_stdout,*) "lanczos1 :", m,"  ",csa,"  ",csb
- 
    else 
       call POP_ErrorSet(errorCode, &
          'POP_Lanczos: error estimating in lanczos: b == 0 !!!')
       return
    endif 
    
+!-----------------------------------------------------------------------
+!
+!  compute eigenvalues of the tridiagonal matrix T every 10 steps
+!
+!-----------------------------------------------------------------------
     
    if ((mod(m,10) == 0) .or. (m ==maxlanczosstep)) then
       if (POP_myTask == POP_masterTask ) then
@@ -3035,7 +3085,7 @@
         mcsa(m) = vcsa(m)
             
         info = 0
-        !CALL DSTERF(MAXLANCZOSSTEP, MCSA, MCSB, INFO)
+
         ! compute smallest eigenvalue
         CALL DSTEBZ('I','E',M,0.0, 1.0E6,1,1,1.0E-5,MCSA, MCSB,MEIGS,NSPLIT,EIGS,EIBLOCK,EISPLIT,EWORK,EIWORK,INFO)
         if (info /= 0) then 
@@ -3044,7 +3094,7 @@
            return
         endif
         v = EIGS(1)
-        ! compute largest eigenvalue
+        ! compute largest eigenvalue ---- not needed here
         CALL DSTEBZ('I','E',M,0.0, 1.0E6,M,M,1.0E-5,MCSA, MCSB,MEIGS,NSPLIT,EIGS,EIBLOCK,EISPLIT,EWORK,EIWORK,INFO)
         if (info /= 0) then 
            call POP_ErrorSet(errorCode, &
@@ -3060,6 +3110,8 @@
       endif 
 
       call POP_Broadcast(v,POP_masterTask,errorCode)
+
+      ! check convergence of the smallest eigenvalue
       if (abs(1-v/mineig ) <  LanczosconvergenceCriterion) then 
           exit lanczos_iter
       endif 

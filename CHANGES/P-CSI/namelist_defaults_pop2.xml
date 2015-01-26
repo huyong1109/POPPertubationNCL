@@ -191,8 +191,8 @@
 <preconditionerFile>'unknownPrecondFile'</preconditionerFile>
 <EvpXblocksize>8</EvpXblocksize>
 <EvpYblocksize>8</EvpYblocksize>
-<LanczosconvergenceCriterion>0.1</LanczosconvergenceCriterion>
-<maxLanczosSteps>20</maxLanczosSteps>
+<LanczosconvergenceCriterion>0.15</LanczosconvergenceCriterion>
+<maxLanczosStep>100</maxLanczosStep>
 
 <!---------------------------->
 <!-- vertical_mix_nml -->
