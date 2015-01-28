@@ -1054,7 +1054,7 @@ id="solverChoice"
 type="char*256"
 category="solvers"
 group="solvers"
-valid_values="pcg,ChronGear,pcsi" >
+valid_values="pcg,ChronGear,PCSI" >
 Solver to use for elliptic system for surface pressure in barotropic mode.
 
 Valid Values: 'pcg', 'ChronGear,PCSI'
@@ -1098,7 +1098,7 @@ category="solvers"
 group="solvers" >
 Start number of steps in which to check check for convergence.
 
-Default: 60
+Default: 40
 </entry>
 
 <entry 
@@ -1150,7 +1150,7 @@ category="solvers"
 group="solvers" >
 Convergence error criterion for lanczos step.
 
-Default:  0.1
+Default:  0.15
 </entry>
 
 <entry 
@@ -1160,7 +1160,7 @@ category="solvers"
 group="solvers" >
 Maximum Lanczos Steps
 
-Default: 20
+Default: 100
 </entry>
 <!-- - - - - - - - - - - - - - - - - - -->
 <!-- Group: vertical_mix_nml         - -->

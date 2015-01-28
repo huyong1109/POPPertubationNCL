@@ -518,6 +518,7 @@ add_default($nl, 'clinic_distribution_type', 'val'=>"$POP_DECOMPTYPE");
 add_default($nl, 'tropic_distribution_type', 'val'=>"$POP_DECOMPTYPE");
 add_default($nl, 'ew_boundary_type');
 add_default($nl, 'ns_boundary_type');
+add_default($nl, 'profile_barrier');
 
 ##################################
 # namelist group: io_nml         #
