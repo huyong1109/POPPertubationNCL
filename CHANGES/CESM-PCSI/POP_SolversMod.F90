@@ -2506,10 +2506,7 @@
    integer (POP_i4)::  errorCode          ! returned error code
    real(POP_r8),dimension(n,m) :: y       ! temporary array
 
-   ! call BLAS lib to compute inverse
-   real(POP_r8),dimension(n +m -5) :: WORK
-   integer ,dimension(n +m -5) :: IPIV
-   real(POP_r8),dimension(n +m -5,n +m -5) :: rin,work1
+   real(POP_r8),dimension(n +m -5,n +m -5) :: rin,WORK
    real(POP_r8):: maxvalr
    real(POP_r8),dimension(n +m -5) :: r
 
@@ -2565,23 +2562,22 @@
    end do 
 
    rin(:,:) = rinv(:,:)
-   work1(:,:) = rinv(:,:)
 
    call inverse(rin,rinv,nm)
 
    !! check pre rinv 
-   rin(:,:) = 0.0_POP_r8
+   WORK(:,:) = 0.0_POP_r8
    do j = 1,nm
      do i = 1,nm
        do k = 1,nm
-         rin(i,j) = rin(i,j) + rinv(i,k)*work1(k,j)
+         WORK(i,j) = WORK(i,j) + rinv(i,k)*rin(k,j)
        end do 
        if (i == j ) then 
-         rin(i,j) = rin(i,j) -1.0
+         WORK(i,j) = WORK(i,j) -1.0
        endif 
      end do 
    end do 
-   maxvalr = maxval(abs(rin))
+   maxvalr = maxval(abs(WORK))
    !write(POP_stdout,*) "MAXVAL(RINV*RIN) = ", maxvalr
    if (maxvalr > 1.0e-8 ) then 
      write(POP_stdout,*) 'maxvalr ', maxvalr
@@ -2729,16 +2725,6 @@
         csa,                   &! inner product alpha = (p,r)
         csb,                   &! inner product beta = (r,s)
         csc                     ! vector magnitude  ||r0||_A
-
-   ! CALL BLAS LIB TO COMPUTE TWO EXTREME EIGENVALUES
-   integer (POP_i4) :: &
-      IL,IU,MEIGS,NSPLIT
-
-   integer (POP_i4),dimension(:), allocatable :: &
-      EIBLOCK,EISPLIT
-
-   real (POP_r8), dimension(:), allocatable :: &
-      EIGS,EWORK,EIWORK
 
    real (POP_r8) :: & 
         MINEIG   
@@ -2924,30 +2910,25 @@
    if ((mod(m,10) == 0) .or. (m ==maxlanczosstep)) then
       if (POP_myTask == POP_masterTask ) then
 
-        allocate(mcsa(m), mcsb(m-1))
-        allocate(EIGS(m),EWORK(4*m),EIWORK(3*m))
-        allocate(EIBLOCK(m),EISPLIT(m))
+        allocate(mcsa(m), mcsb(m))
         do i = 1, m-1
             mcsa(i) = vcsa(i) 
-            mcsb(i) = vcsb(i)
+            mcsb(i+1) = vcsb(i)
         end do
         mcsa(m) = vcsa(m)
+        mcsb(1) = 0.0
             
         info = 0
-
         ! compute smallest eigenvalue
-        CALL DSTEBZ('I','E',M,0.0, 1.0E6,1,1,1.0E-5,MCSA, MCSB,MEIGS,NSPLIT,EIGS,EIBLOCK,EISPLIT,EWORK,EIWORK,INFO)
+        call ratqr(m, 1.0e-8_POP_r8, mcsa,mcsb,v,info)
         if (info /= 0) then 
            call POP_ErrorSet(errorCode, &
               'POP_Lanczos: error estimating smallest eigenvalue !!!')
            return
         endif
-        v = EIGS(1)
 
         write(POP_stdout,'(a18,i3,a8,2e15.7)') "Lanczos steps ", m, " eigs:", v, u
         deallocate(mcsa, mcsb)
-        deallocate(EIGS,EWORK,EIWORK)
-        deallocate(EIBLOCK,EISPLIT)
       endif 
 
       call POP_Broadcast(v,POP_masterTask,errorCode)
@@ -3015,14 +2996,6 @@
 ! based on Doolittle LU factorization for Ax=b.
 ! Follow : Alex G. December 2009
 !-----------------------------------------------------------
-! input ...
-! a(n,n) - array of coefficients for matrix A
-! n      - 
-! output ...
-! c(n,n) - inverse matrix of A
-! comments ...
-! the original matrix a(n,n) will be destroyed 
-! during the calculation
 
 ! !REVISION HISTORY:
 !  this routine implemented by Yong Hu, et al., Tsinghua University
@@ -3041,10 +3014,9 @@
   integer::  i, j, k
 
   ! step 0: initialization for matrices L and U and b
-  ! Fortran 90/95 aloows such operations on matrices
-  L=0.0
-  U=0.0
-  b=0.0
+  L(:,:)=0.0
+  U(:,:)=0.0
+  b(:)=0.0
 
   ! step 1: forward elimination
   do k=1, n-1
@@ -3057,35 +3029,29 @@
     end do
   end do
 
-  ! Step 2: prepare L and U matrices 
-  ! L matrix is a matrix of the
-  ! elimination coefficient
-  ! + the diagonal elements are 1.0
+  ! Step 2: prepare L and U matrices.
   do i=1,n
     L(i,i) = 1.0
   end do
-  ! U matrix is the upper triangular
-  ! part of A
+
   do j=1,n
     do i=1,j
       U(i,j) = a(i,j)
     end do
   end do
 
-  ! Step 3: compute
-  ! columns of the inverse
-  ! matrix C
+  ! Step 3: compute columns of the inverse matrix C
   do k=1,n
     b(k)=1.0
     d(1) = b(1)
-    ! Step 3a: Solve Ld=b using the forward substitution
+
     do i=2,n
       d(i)=b(i)
       do j=1,i-1
         d(i)=d(i)-L(i,j)*d(j)
       end do
     end do
-    ! Step 3b:Solve Ux=d using the back substitution
+
     x(n)=d(n)/U(n,n)
     do i = n-1,1,-1
       x(i) = d(i)
@@ -3094,13 +3060,117 @@
       end do
       x(i) = x(i)/u(i,i)
     end do
-    ! Step  3c: fill the solutions  x(n) into column  k  of  C
+
+    ! fill the solutions  x(n) into column  k  of  C
     do  i=1,n
       c(i,k) = x(i)
     end do
     b(k)=0.0
   end do 
+
  end subroutine inverse
+
+ subroutine  ratqr(n, eps1, d, e, mineig,ierr )
+! !DESCRIPTION:
+!  This subroutine finds the algebraically smallest 
+!  eigenvalue of a positive definite symmetric tridiagonal matrix by the
+!  rational QR method with Newton corrections.
+!  Follow EISPACK lib subroutine RATQR 
+!
+! ! INPUT VARIABLES
+   integer(POP_i4), intent(in) ::  n    ! matrix order
+   real(POP_r8),intent(in) :: d(n)      ! diagonal elements
+   real(POP_r8),intent(in) :: e(n)      ! off-diagonal elements, e(1) is arbitrary
+   real(POP_r8),intent(in) :: eps1      ! convergence tolerance
+
+!  ! OUTPUT VARIABLES
+   integer(POP_i4), intent(inout) ::  ierr  ! status flag 
+   real(POP_r8), intent(inout) ::  mineig   !smallest eigevalue
+
+!  ! LOCAL  VARIABLES
+   real(POP_r8), dimension(n) ::  e2, bd, w
+   real(POP_r8) :: f, ep, delta, err
+   integer(POP_i4) i, ii ! local counters
+   real(POP_r8) p, q, qp,r,s,tot
+
+   ierr = 0
+   w(1:n) = d(1:n)
+   err = 0.0_POP_r8 
+   s = 0.0_POP_r8 
+   tot = w(1)
+   q = 0.0_POP_r8 
+
+   do i = 1, n
+      p = q
+      bd(i) = e(i)*e(i)
+      q = 0.0_POP_r8 
+
+      if ( i /= n ) then
+        q = abs ( e(i+1) )
+      end if
+
+      tot = min ( w(i) - p - q, tot )
+   end do
+   bd(1) = 0.0_POP_r8 
+
+   if ( tot < 0.0_POP_r8  ) then
+     tot = 0.0_POP_r8 
+   else 
+     w(1:n) = w(1:n) - tot
+   end if
+
+!  QR transformation.
+
+   do while (.true.)
+     tot = tot + s
+     delta = w(n) - s
+     i = n
+     if ( delta <= eps1 ) then
+       exit
+     endif 
+
+     f = bd(n) / delta
+     qp = delta + f
+     p = 1.0
+
+     do ii = 1, n - 1
+       i = n - ii
+       q = w(i) - s - f
+       r = q / qp
+       p = p * r + 1.0
+       ep = f * r
+       w(i+1) = qp + ep
+       delta = q - ep
+
+       ! check convergence 
+       if ( delta <= eps1 ) exit
+
+       f = bd(i) / q
+       qp = delta + f
+       bd(i+1) = qp * ep
+     end do
+     
+     ! check convergence 
+     if ( delta <= eps1 ) exit
+
+     w(1) = qp
+     s = qp / p
+
+     !  Set error: irregular end of iteration.
+     if ( tot + s <= tot ) then
+       ierr = 1
+       return
+     end if
+
+   end do 
+
+   w(1) = tot
+   err = err + abs ( delta)
+   bd(1) = err
+   mineig = w(1)
+
+   return
+ end subroutine ratqr
 
  end module POP_SolversMod
 
