@@ -10,36 +10,21 @@ pertname=(/"pert.6", "pert.8", "pert.10","pert.12", "pert.14", "csi", "origin", 
 ntime = dimsizes(time)
 nvars = dimsizes(vars)
 npert = dimsizes(pert)
-pref  ="./validation_opensea/validationtest-"
+Reg  = (/"Southern","Pacific","Indian","Persian","unknow","Atlantic","Mediterranean","Baffin","North","Arctic","Hudson"/)
+nReg = dimsizes(Reg)
+pref  ="./validation_seas/validationtest-"
 suf  ="-41cases.log "
-y = new((/nvars,npert+2,ntime/),"float")
+y = new((/nvars,npert+2,ntime,nReg/),"float")
   do m = 0,ntime-1
   do n =0,nvars-1
   do k =0,npert-1
   cmd = "grep '"+vars(n)+": RMSZ score '  "+pref+time(m)+"-"+pert(k)+suf+" |awk '{print $6}'"
-  y(n,k,m) = stringtofloat(systemfunc(cmd))
+  y(n,k,m,:) = stringtofloat(systemfunc(cmd))
   end do
-  ;if(n .ne. nvars-1)  then
-  cmd = "grep '"+vars(n)+" (RMSZ): min'  "+pref+time(m)+"-"+pert(0)+suf+" |awk '{print $6}'"
-  y(n,npert,m) = stringtofloat(systemfunc(cmd))
-  ;print((/y(n,npert,m)/))
-  cmd = "grep '"+vars(n)+" (RMSZ): min'  "+pref+time(m)+"-"+pert(0)+suf+"|awk '{print $12}'"
-  ;print(cmd)
-  y(n,npert+1,m) = stringtofloat(systemfunc(cmd))
-  print((/y(n,npert+1,m)/))
-  ;else 
-  ;cmd = "grep '"+vars(n)+": min'  "+pref+time(m)+"-"+pert(0)+suf+" |awk '{print $5}'"
-  ;;print(cmd)
-  ;y(n,npert,m) = stringtofloat(systemfunc(cmd))
-  ;;print((/y(n,npert,m)/))
-  ;cmd = "grep '"+vars(n)+": min'  "+pref+time(m)+"-"+pert(0)+suf+"|awk '{print $11}'"
-  ;;print(cmd)
-  ;y(n,npert+1,m) = stringtofloat(systemfunc(cmd))
-  ;print((/y(n,npert+1,m)/))
-  ;  end if
   end do
   end do
 
+  y(:,npert:npert+1,:,:) = asciiread(pref+"ens"+suf,(/nvars,2,ntime,nReg/),"float")
   ;;; special case for SSH
 
   print(y)
@@ -51,7 +36,8 @@ do i = 0, nvars-1
 ;************************************************
 ; plotting parameters
 ;************************************************
-wks   = gsn_open_wks ("X11",vars(i)+"-RMSZ-ensemble41-month-pert")                  ; open workstation
+do iReg = 0,nReg -1
+wks   = gsn_open_wks ("png",vars(i)+"-RMSZ-ensemble41-month-pert-"+Reg(iReg))                  ; open workstation
 gsn_define_colormap(wks,"amwg")
 
 res                   = True                      ; plot mods desired
@@ -66,7 +52,7 @@ res@xyMarkerSizeF      = 0.3
 res@xyYStyle = "Log"
 res@tiXAxisString     = "Month"         ; change line color
 res@tiYAxisString     = "RMSZ"         ; change line color
-res@tiMainString     = vars(i)+" RMSZ"         ; change line color
+res@tiMainString     = vars(i)+" "+Reg(iReg)         ; change line color
 res@pmLegendDisplayMode     = "Always"
 res@pmLegendSide     = "Right"
 res@pmLegendOrthogonalPosF     = -0.4
@@ -81,7 +67,8 @@ res@lgLabelFontHeightF     = 0.02
 ;res@tmYLPrecision = 4
 res@xyExplicitLabels = pertname
 
-plot  = gsn_csm_xy (wks,ispan(1,12,1),y(i,:,:),res) ; create plot
+plot  = gsn_csm_xy (wks,ispan(1,12,1),y(i,:,:,iReg),res) ; create plot
+end do
 end do
 
 

@@ -5,8 +5,11 @@ load "$NCARG_ROOT/lib/ncarg/nclscripts/csm/gsn_csm.ncl"
   begin
 time=(/"01","02","03","04","05","06","07","08","09","10","11","12"/)
 vars=(/"UVEL", "VVEL","TEMP","SALT","SSH"/)
-pert=(/"6", "8", "10","12", "14", "csi", "np"/)
-pertname=(/"pert.6", "pert.8", "pert.10","pert.12", "pert.14", "csi", "origin", "Ensemb min","Ensemb max"/)
+;pert=(/"6", "8", "10","12", "14", "csi", "np"/)
+;pertname=(/"pert.6", "pert.8", "pert.10","pert.12", "pert.14", "csi", "origin", "Ensemb min","Ensemb max"/)
+pert=(/ "10","12", "14", "csi", "np"/)
+pertname=(/"pert.10","pert.12", "pert.14", "csi", "origin", "Ensemb min","Ensemb max"/)
+
 ntime = dimsizes(time)
 nvars = dimsizes(vars)
 npert = dimsizes(pert)
@@ -19,27 +22,10 @@ y = new((/nvars,npert+2,ntime/),"float")
   cmd = "grep '"+vars(n)+": RMSZ score '  "+pref+time(m)+"-"+pert(k)+suf+" |awk '{print $6}'"
   y(n,k,m) = stringtofloat(systemfunc(cmd))
   end do
-  ;if(n .ne. nvars-1)  then
-  cmd = "grep '"+vars(n)+" (RMSZ): min'  "+pref+time(m)+"-"+pert(0)+suf+" |awk '{print $6}'"
-  y(n,npert,m) = stringtofloat(systemfunc(cmd))
-  ;print((/y(n,npert,m)/))
-  cmd = "grep '"+vars(n)+" (RMSZ): min'  "+pref+time(m)+"-"+pert(0)+suf+"|awk '{print $12}'"
-  ;print(cmd)
-  y(n,npert+1,m) = stringtofloat(systemfunc(cmd))
-  print((/y(n,npert+1,m)/))
-  ;else 
-  ;cmd = "grep '"+vars(n)+": min'  "+pref+time(m)+"-"+pert(0)+suf+" |awk '{print $5}'"
-  ;;print(cmd)
-  ;y(n,npert,m) = stringtofloat(systemfunc(cmd))
-  ;;print((/y(n,npert,m)/))
-  ;cmd = "grep '"+vars(n)+": min'  "+pref+time(m)+"-"+pert(0)+suf+"|awk '{print $11}'"
-  ;;print(cmd)
-  ;y(n,npert+1,m) = stringtofloat(systemfunc(cmd))
-  ;print((/y(n,npert+1,m)/))
-  ;  end if
   end do
   end do
 
+  y(:,npert:npert+1,:) = asciiread(pref+"ens"+suf,(/nvars,2,ntime/),"float")
   ;;; special case for SSH
 
   print(y)
@@ -51,28 +37,30 @@ do i = 0, nvars-1
 ;************************************************
 ; plotting parameters
 ;************************************************
-wks   = gsn_open_wks ("X11",vars(i)+"-RMSZ-ensemble41-month-pert")                  ; open workstation
+wks   = gsn_open_wks ("png",vars(i)+"-RMSZ-ensemble41-month-pert-opensea-success")                  ; open workstation
 gsn_define_colormap(wks,"amwg")
 
 res                   = True                      ; plot mods desired
 
 ; note a similiar resource is xyLineThicknessF, which will effect all
 ; the lines in the array.
-res@xyLineThicknesses = (/4.0,4.0,4.0,4.0,4.0,4.0,4.0,8.0,8.0/)               ; make 2nd lines thicker
+;res@xyLineThicknesses = (/4.0,4.0,4.0,4.0,4.0,4.0,4.0,8.0,8.0/)               ; make 2nd lines thicker
+res@xyLineThicknesses = (/4.0,4.0,4.0,4.0,4.0,8.0,8.0/)               ; make 2nd lines thicker
 
-res@xyLineColors      = ispan(1,10*(npert+2),10)          ; change line color
+;res@xyLineColors      = ispan(1,10*(npert+2),10)          ; change line color
+res@xyLineColors      = ispan(21,10*(npert+4),10)          ; change line color
 res@xyMarkers      = ispan(1,npert+2,1)          ; change line color
 res@xyMarkerSizeF      = 0.3
 res@xyYStyle = "Log"
 res@tiXAxisString     = "Month"         ; change line color
 res@tiYAxisString     = "RMSZ"         ; change line color
-res@tiMainString     = vars(i)+" RMSZ"         ; change line color
+res@tiMainString     = vars(i)         ; change line color
 res@pmLegendDisplayMode     = "Always"
 res@pmLegendSide     = "Right"
 res@pmLegendOrthogonalPosF     = -0.4
 res@pmLegendParallelPosF     = 0.6
 res@lgPerimOn     = False
-res@xyDashPatterns = ispan(1,2*(npert+2),2)
+res@xyDashPatterns = ispan(1,2*(npert+2),10)
 res@pmLegendWidthF     = 0.10
 res@pmLegendHeightF     = 0.40
 res@lgLabelFontHeightF     = 0.02

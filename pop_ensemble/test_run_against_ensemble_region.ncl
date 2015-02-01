@@ -1,4 +1,5 @@
 load "$NCL_VALID_LIB_DIR/rmsz_latitude.ncl"
+load "$NCL_VALID_LIB_DIR/rmsz_seas.ncl"
 load "$NCL_VALID_LIB_DIR/area_avg.ncl"
 load "$NCL_VALID_LIB_DIR/global.ncl"
 load "$NCL_VALID_LIB_DIR/plot_rmsz.ncl"
@@ -113,8 +114,13 @@ begin
   FailTest  = False
   FailTest2 = False
   VarInEns  = True
+  
 
-  RMSZScore = calculate_rmsz_score_lat(run_file, ens_file, var3d, var2d, tind, vinterp, FailTest, VarInEns, verbose)
+  ;;;;; for latitude region test
+  ;RMSZScore = calculate_rmsz_score_lat(run_file, ens_file, var3d, var2d, tind, vinterp, FailTest, VarInEns, verbose)
+
+  ;;;;; for open sea region
+  RMSZScore = calculate_rmsz_score_seas(run_file, ens_file, var3d, var2d, tind, vinterp, FailTest, VarInEns, verbose)
   if (HaveGlobalMeans) then
     GlobalMean = calculate_global_mean(run_file, ens_file, var3d, var2d, tind, vinterp, FailTest2, VarInEns, verbose)
   end if

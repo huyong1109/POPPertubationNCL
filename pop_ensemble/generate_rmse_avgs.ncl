@@ -1,4 +1,5 @@
 load "$NCL_VALID_LIB_DIR/diff.ncl"
+load "$NCL_VALID_LIB_DIR/diff_opensea.ncl"
 
 begin
 
@@ -114,7 +115,7 @@ begin
   print((/"---------------"/))
   print((/ofile/))
 
-  status = diff(nfile,ofile,  ensemble_file, tag, compset, res, mach, tind, verbose)
+  status = diff_opensea(nfile,ofile,  ensemble_file, tag, compset, res, mach, tind, verbose)
   delete(nfile)
   delete(ofile)
   end do

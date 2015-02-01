@@ -1,4 +1,5 @@
 load "$NCL_VALID_LIB_DIR/create_meandev.ncl"
+load "$NCL_VALID_LIB_DIR/create_meandev_opensea.ncl"
 load "$NCL_VALID_LIB_DIR/create_ensemble.ncl"
 
 begin
@@ -122,7 +123,7 @@ begin
   print((/infiles/))
 
   ;;status = create_ensemble(infiles, ensemble_file, tag, compset, res, mach, tind, vinterp, verbose)
-  status = create_meandev(infiles, ensemble_file, tag, compset, res, mach, tind, vinterp, verbose)
+  status = create_meandev_opensea(infiles, ensemble_file, tag, compset, res, mach, tind, vinterp, verbose)
   delete(infiles)
   end do
 end
