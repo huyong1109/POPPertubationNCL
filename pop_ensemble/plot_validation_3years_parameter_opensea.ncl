@@ -7,8 +7,10 @@ year=(/"1","2","3"/)
 time=sprinti("%0.2i",ispan(1,12,1))
 ;print(time)
 vars=(/"UVEL", "VVEL","TEMP","SALT","SSH"/)
-pert=(/ "year.tol.10", "year.tol.11", "year.tol.12", "year.tol.14", "year.tol.16","year.csi", "year"/)
-pertname=(/ "ChronGear + tolerance (1.0e-10)", "ChronGear + tolerance (1.0e-11)", "ChronGear + tolerance (1.0e-12)", "ChronGear + tolerance (1.0e-14)", "ChronGear + tolerance (1.0e-16)","P-CSI  + tolerance (1.0e-13)", "Default Configuration", "Ensemb min","Ensemb max"/)
+pert=(/ "year.P96b40x33", "year.P96b20x16", "year.P48","year.P192","year.P384" /)
+pertname=(/"P96 bs=40x33", "P96 bs=20x16", "#cores = 48","#cores = 192", "#cores = 384", "Ensemb min","Ensemb max"/)
+;pert=(/"year.P384","year.tadvect","year.convectdiff" /)
+;pertname=(/"#cores = 384", "tadvect = lw_lim","convect_diff = 1.0e5", "Ensemb min","Ensemb max"/)
 ;pert=(/"year.tol.12", "year.tol.14", "year.tol.16","year.csi", "year"/)
 ;pertname=(/  "tol.12", "tol.14", "tol.16","csi", "origin", "Ensemb min","Ensemb max"/)
 
@@ -48,10 +50,10 @@ do i = 0, nvars-1
 ;************************************************
 ; plotting parameters
 ;************************************************
-wk_type = "x11"
+wk_type = "png"
 wk_type@wkWidth = 2500
 wk_type@wkHeight= 2500
-filename = vars(i)+"-RMSZ-ens40-3y-tol-opensea"
+filename = vars(i)+"-RMSZ-ens40-3y-layout-opensea"
 wks   = gsn_open_wks (wk_type,filename)                  ; open workstation
 gsn_define_colormap(wks,"amwg")
 
@@ -63,8 +65,8 @@ thick = new(npert,float)
 thick = 14.0
 res@xyLineThicknesses = thick
 ;res@xyLineThicknesses = (/ 16.0, 4.0,4.0,4.0,4.0,8.0,8.0/)               ; for success
-res@xyLineColors = (/"black","RoyalBlue","darkslategray",\
-             "SlateBlue","lightseagreen","firebrick","hotpink","navy","orange"/)
+res@xyLineColors = (/"SlateBlue","lightseagreen","firebrick","hotpink","navy","orange", \
+"black","RoyalBlue","darkslategray"/)
 ;res@xyLineColors      = ispan(1,10*(npert+2),10)          ; for tol.10, tol.11 cases
 ;res@xyLineColors      = ispan(21,10*(npert+4),10)          ; change line color
 res@xyMarkers      = ispan(1,npert+2,1)          ; change line color
@@ -74,8 +76,8 @@ res@tiXAxisString     = "Simulation Months"         ; change line color
 res@tiYAxisString     = "RMSZ"         ; change line color
 ;res@tiMainString     = vars(i)         ; change line color
 res@pmLegendDisplayMode     = "Always"
-res@pmLegendSide     = "Bottom"
-res@pmLegendOrthogonalPosF     = -0.44
+res@pmLegendSide     = "Top"
+res@pmLegendOrthogonalPosF     = -0.30
 ;res@pmLegendParallelPosF     = 0.86
 res@lgPerimOn     = False
 res@xyDashPatterns = ispan(1,2*(npert+2),2)
@@ -113,7 +115,7 @@ gsres                   = True                        ; poly res
 draw(plot)
 frame(wks)
 delete(wks)
-;system("convert -trim "+filename+".png " +filename+".png")
+system("convert -trim "+filename+".png " +filename+".png")
 end do
 
 

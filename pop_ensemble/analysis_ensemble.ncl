@@ -1,20 +1,9 @@
-load "$NCL_VALID_LIB_DIR/rmsz.ncl"
-load "$NCL_VALID_LIB_DIR/area_avg.ncl"
-load "$NCL_VALID_LIB_DIR/global.ncl"
-load "$NCL_VALID_LIB_DIR/plot_rmsz.ncl"
 
 begin
-; (0) User-defined information used for determining ensemble name
-;     Note that these are default values, but can be changed from the command
-;     line
-  if (.not.isdefined("ens_file")) then
-    print((/"ERROR: you must specify both the ensemble file and the output file you want to compare to ensemble!"/))
-    print((/"Proper usage:"/))
-    print((/"$ ncl validation-test.ncl "+"$FILENAME\"+str_get_dq()+" ens_file=\"+str_get_dq()+"$FILENAME\"+str_get_dq()/))
-    status_exit(1)
-;    run_file = "../single_run_data.BC5.ne30_g16/cesm1_3_testing/yellowstone.pgi-a03e-001.BC5.cam.h0.0001-01-01-00000.nc"
-  end if
-  
+   
+  ensroot = "$WORK/NCOUT/global_rmsz/perturb.T.h.mon"
+  mon=(/"01","02","03","04","05","06","07","08","09","10","11","12"/)
+  nmon = dimsizes(mon) 
   ; For monthly data sets, want to look at time index 0 not 1
   ; (Annual data puts initial condition in time index 0)
 

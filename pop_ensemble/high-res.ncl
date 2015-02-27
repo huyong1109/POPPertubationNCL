@@ -43,7 +43,8 @@ begin
     res@cnLineLabelsOn       = False      ; turns off contour line labels
     res@cnFillMode           = "RasterFill"      ; turns off contour line labels
     res@cnInfoLabelOn        = False      ; turns off contour info label
-    ;res@cnLevelSelectionMode = "Manuallevels"
+    res@cnLevelSelectionMode = "Explicitlevels"
+    res@cnLevels = (/0.01, 0.1*ispan(1,10,1), 2, 10/)
     ;res@cnMinLevelValF = -0.6
     ;res@cnMaxLevelValF = 0.6
     ;res@cnLevelSpacingF = 0.4
