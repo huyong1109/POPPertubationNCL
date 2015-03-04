@@ -22,17 +22,19 @@ begin
       end if
       if (dimsizes(dims).eq.2) then
         ; lat,lon coords instead of ncol coords
-        nlat = dims(0)
-        nlon = dims(1)
-        do i = 1, nlat -1
-          do j = 0,nlon-1
-            if (ismissing(stddev(i,j)) .or. stddev(i,j).le.tol) then
-              return_val(i,j) = 0.
-            else
-              return_val(i,j) =(val(i,j)-avg(i,j))/stddev(i,j) 
-            end if
-          end do
-        end do
+        ;nlat = dims(0)
+        ;nlon = dims(1)
+        ;do i = 1, nlat -1
+        ;  do j = 0,nlon-1
+        ;    if (ismissing(stddev(i,j)) .or. stddev(i,j).le.tol) then
+        ;      return_val(i,j) = 0.
+        ;    else
+        ;      return_val(i,j) =(val(i,j)-avg(i,j))/stddev(i,j) 
+        ;    end if
+        ;  end do
+        ;end do
+        ;;;; more efficient way , never tested  yet
+        return_val = (val-avg)/where(stddev .le. tol, stddev@_FillValue, stddev)
 
       else
         return_val(ind(stddev.le.tol)) = 0.

@@ -17,12 +17,12 @@ begin
   mon = ispan(1,12,1)
   smon = sprinti("%0.2i", mon) ; string 
   vars=(/"UVEL", "VVEL","TEMP","SALT","SSH"/)
-  ;nvar = dimsizes(vars)
-  nvar = 4
+  nvar = dimsizes(vars)
+  nvar3d = nvar-1
   npdf = 40
 
   ;case = ""
-  Zpdf = new((/npert,36,5,npdf/),float)
+  Zpdf = new((/npert,36,nvar,npdf/),float)
   
   ;;; prepare mask and grid information
   case = pert(0)
@@ -74,7 +74,7 @@ begin
         Zpdf(ncase,indmon,4,:) = zpdfx
 
         ;;; read 3D variables
-        do v = 0,nvar-1
+        do v = 0,nvar3d-1
           print("Variable: "+vars(v))
           data =  cntf->$vars(v)$(0,:,:,:)
           ;;; Zscore
@@ -87,5 +87,5 @@ begin
 
     end do
   end do
-  asciiwrite("ZcoreHist_ENS.ascii",Zpdf)
+  asciiwrite("ZcoreHist_ENS_VDC.ascii",Zpdf)
 end

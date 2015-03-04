@@ -10,11 +10,9 @@ setenv CASEROOT $GSCRATCH
 setenv CASE_PFX perturb.g40.T.year
 setenv OCASE $CASEROOT/$CASE_PFX
 
-
-#(1 71 51 41 21 91) ! done
-#(11 31 61 81 )
-#(5 15 25 35 45 55 65 75 85 95)
-foreach pert (5)
+# (1 ) done
+#foreach pert ( 5 71 51 41 21 91 11 31 61 81 25 35 45 55 65 75 85 95 3 8 13 18 23 28 33 38 43 48 53 58 63 68 73 78 83 88 93 98)
+foreach pert ( 15 )
   echo "pert : $pert"
   if ( $pert == 0 ) then 
     ptlim=0.0
@@ -56,18 +54,20 @@ foreach pert (5)
   
   # Change pertlim in clone
   
-  echo "init_ts_perturb = $ptlim"   >> user_nl_pop2
+  #sed -i  "s/init_ts_perturb = 0.14e-13/init_ts_perturb = $ptlim/g" user_nl_pop2
+  echo "init_ts_perturb = $ptlim" >> user_nl_pop2
   ./preview_namelists
   
   # Adjust walltime, account number and ptile in clone
-  cp ~/1001-01-01-00000/* $CASE1/run
+  rm $CASE1/run/*.nc
+  cp $WORK/1001-01-01-00000/* $CASE1/run
   
   #CHECK RUN
-  sed -i "s/ 4:00/ 6:00/g" $CASE1/*.run
+  #sed -i "s/ 4:00/ 6:00/g" $CASE1/*.run
   #sed -i "s/ regular/ premium/g" $CASE1/*.run
-  sed -i "s/ P00000000/ P93300612/g" $CASE1/*.run
-  sed -i "s/ P07010002/ P93300612/g" $CASE1/*.run
-  sed -i "s/ptile=15/ptile=16/g" $CASE1/*.run
+  #sed -i "s/ P00000000/ P93300612/g" $CASE1/*.run
+  #sed -i "s/ P07010002/ P93300612/g" $CASE1/*.run
+  #sed -i "s/ptile=15/ptile=16/g" $CASE1/*.run
   
   # Only submit the cloned case if --nosubmit is off
   ./$CASE1_NAME.submit

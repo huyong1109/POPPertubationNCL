@@ -149,14 +149,6 @@
    real (POP_r8) ::         &
       rmsResidual            ! residual (also a diagnostic)
 
-!-----------------------------------------------------------------------
-!
-!  PCSI related parameters
-!  When Matsuno is used, there are  two different coefficient matrix A.
-!  Thus two sets of eigenvalues and EVP preconditioning matrix needed
-!
-!-----------------------------------------------------------------------
-
    real (POP_r8), save ::          & 
       PcsiMaxEigs,         &! eigenvalues for PCSI method
       PcsiMinEigs           ! smallest eigenvalue
@@ -2885,7 +2877,7 @@
    vcsb(m) = csb
    
 
-   ! Gershgorin circle theroem to esitimate the largest eigenvaule 
+   ! Gershgorin circle theorem to estimate the largest eigenvaule 
    if (m ==1 ) then
     u = vcsa(1) + vcsb(1)
    else 

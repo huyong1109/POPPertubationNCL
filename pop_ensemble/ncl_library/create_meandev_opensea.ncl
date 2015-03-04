@@ -4,8 +4,8 @@ load "$NCL_VALID_LIB_DIR/Zscore.ncl"
 load "$NCL_VALID_LIB_DIR/vinterp.ncl"
 load "$NCL_VALID_LIB_DIR/area_avg.ncl"
 
-undef("create_meandev")
-function create_meandev(filelist, ensemble_file, tag, compset, resolution, mach, tind, vinterp, verbose)
+undef("create_meandev_opensea")
+function create_meandev_opensea(filelist, ensemble_file, tag, compset, resolution, mach, tind, vinterp, verbose)
 begin
 ; (1) Initial Setup
 ;     (1a) Open filelist and ensemble_file
@@ -143,11 +143,15 @@ begin
     end do
   end if
 
-  var_name2d  = vNames(ind(vInc2d))
   nvars2d = num(vInc2d)  ; hyedit
+  if ( nvars2d .gt. 0 ) then
+    var_name2d  = vNames(ind(vInc2d))
+  end if 
   ;nvars2d = 1
-  var_name3d  = vNames(ind(vInc3d))
   nvars3d = num(vInc3d) ; hyedit
+  if ( nvars3d .gt. 0 ) then
+    var_name3d  = vNames(ind(vInc3d))
+  end if
   ;nvars3d = 1
   var_nameAll = vNames(ind(vInc2d.or.vInc3d))
   print((/"Done! Using "+nvars3d+" 3d vars and "+nvars2d+" 2d vars."/))
@@ -183,29 +187,40 @@ begin
     npts2d = int2flt(nlat*nlon)
     output_dims2d = (/nfiles, nlat, nlon/)
     ensemble_dims2d = (/nfiles-1, nlat, nlon/)
-    ensemble_stats2d = (/nvars2d, nlat, nlon/)
+    if ( nvars2d .gt. 0 ) then ;;; 
+      ensemble_stats2d = (/nvars2d, nlat, nlon/)
+    end if
 
     npts3d = int2flt(nlevs*nlat*nlon)
     output_dims3d = (/nfiles, nlevs, nlat, nlon/)
     ensemble_dims3d = (/nfiles-1, nlevs, nlat, nlon/)
-    ensemble_stats3d = (/nvars3d, nlevs, nlat, nlon/)
+    if ( nvars3d .gt. 0 ) then ;;; 
+      ensemble_stats3d = (/nvars3d, nlevs, nlat, nlon/)
+    end if 
   end if
-  output3d = new(output_dims3d, float)
-  ensemble3d = new(ensemble_dims3d, float)
-  Zscore3d=new((/nvars3d, nfiles/),float)
+
+  if ( nvars3d .gt. 0 ) then ;;; 
+    output3d = new(output_dims3d, float)
+    ensemble3d = new(ensemble_dims3d, float)
+    Zscore3d=new((/nvars3d, nfiles/),float)
+    ens_avg3d = new(ensemble_stats3d, float)
+    ens_stddev3d = new(ensemble_stats3d, float)
+    global_mean_lev_3d = new((/nvars3d, nfiles, nlev/), float)
+    global_mean_3d = new((/nvars3d, nfiles/), float)
+  end if
+
+  if ( nvars2d .gt. 0 ) then ;;; 
+    output2d = new(output_dims2d, float)
+    ensemble2d = new(ensemble_dims2d, float)
+    Zscore2d=new((/nvars2d, nfiles/), float)
+    ens_avg2d = new(ensemble_stats2d, float)
+    ens_stddev2d = new(ensemble_stats2d, float)
+    global_mean_2d = new((/nvars2d, nfiles/), float)
+  end if
+  
+
   area_wgt_lev=new((/nlevs/),float)
-  output2d = new(output_dims2d, float)
-  ensemble2d = new(ensemble_dims2d, float)
-  Zscore2d=new((/nvars2d, nfiles/), float)
 
-  ens_avg3d = new(ensemble_stats3d, float)
-  ens_stddev3d = new(ensemble_stats3d, float)
-  ens_avg2d = new(ensemble_stats2d, float)
-  ens_stddev2d = new(ensemble_stats2d, float)
-
-  global_mean_lev_3d = new((/nvars3d, nfiles, nlev/), float)
-  global_mean_3d = new((/nvars3d, nfiles/), float)
-  global_mean_2d = new((/nvars2d, nfiles/), float)
   if (one_spatial_dim) then
     area_wgt = f[0]->TAREA/sum(f[0]->TAREA) ; Note: vector of length ncol
   else
@@ -219,6 +234,9 @@ begin
     ;  vol_wgt(k,:,:) = z_wgt(k)*area_wgt
     ;end do 
     zeroR(:,:) = 0.
+    ;;; set mask for opensea area
+    rmask =  f[0]->REGION_MASK
+    rmask_3D = conform(ens_stddev3d(0,:,:,:),rmask,(/1,2/))
   end if
 
 ;     (2a) 3D variables
@@ -253,6 +271,8 @@ begin
         ens_stddev3d(v,:,:,:) = dim_stddev_n(output3d,0)
       end if
       print((/"Computing Z-scores for variable "+var_name3d(v)/))
+
+      ens_stddev3dtmp = mask(ens_stddev3d(v,:,:,:),rmask_3D .ge. 1 .and. rmask_3D .le. 6, True)
       do n=0,nfiles-1
 
         ; Calculate statistics based on omitting one of the ensemble members
@@ -267,11 +287,11 @@ begin
         do k=0,nlevs-1
           if (one_spatial_dim) then
             Zscore3d(v,n) = Zscore3d(v,n) + sum_sqr(calc_Z(output3d(n,k,:), ens_avg3d(v,k,:), \
-                                                    ens_stddev3d(v,k,:), count3d, flag3d))
+                                                    ens_stddev3dtmp(k,:), count3d, flag3d))
             global_mean_lev_3d(v,n,k) = area_avg_SE(output3d(n,k,:), area_wgt)
           else
             Zscore3d(v,n) = Zscore3d(v,n) + sum_sqr(calc_Z(output3d(n,k,:,:), ens_avg3d(v,k,:,:), \
-                                                    ens_stddev3d(v,k,:,:), count3d, flag3d))
+                                                    ens_stddev3dtmp(k,:,:), count3d, flag3d))
             global_mean_lev_3d(v,n,k) = area_avg(output3d(n,k,:,:), area_wgt)
           end if
         end do ; k-loop
@@ -289,6 +309,7 @@ begin
         print((/"Global mean = "+global_mean_3d(v,n)/))
 
       end do ; n-loop
+      delete(ens_stddev3dtmp)
 
       if (verbose) then
         print_stats(count3d, Zscore3d(v,:), var_name3d(v))
@@ -322,6 +343,7 @@ begin
       ens_stddev2d(v,:,:) = dim_stddev_n(output2d,0)
     end if
 
+    ens_stddev2dtmp = mask(ens_stddev2d(v,:,:),rmask .ge. 1 .and. rmask .le. 6, True)
     do n=0, nfiles-1
       ; Calculate statistics based on omitting one of the ensemble members
 
@@ -333,10 +355,10 @@ begin
       flag2d = False
       count2d = 0
       if (one_spatial_dim) then
-        Zscore2d(v,n) = sum_sqr(calc_Z(output2d(n,:), ens_avg2d(v,:), ens_stddev2d(v,:), \
+        Zscore2d(v,n) = sum_sqr(calc_Z(output2d(n,:), ens_avg2d(v,:), ens_stddev2dtmp(:), \
                                        count2d, flag2d))
       else
-        Zscore2d(v,n) = sum_sqr(calc_Z(output2d(n,:,:), ens_avg2d(v,:,:), ens_stddev2d(v,:,:), \
+        Zscore2d(v,n) = sum_sqr(calc_Z(output2d(n,:,:), ens_avg2d(v,:,:), ens_stddev2dtmp(:,:), \
                                        count2d, flag2d))
       end if
       ; Average over number of points
@@ -355,6 +377,7 @@ begin
         print((/"Global mean = "+global_mean_2d(v,n)/))
       end if
     end do ; n-loop
+    delete(ens_stddev2dtmp)
 
     if (verbose) then
       print_stats(count2d, Zscore2d(v,:), var_name2d(v))
@@ -420,12 +443,29 @@ begin
 
   setfileoption(fout, "DefineMode", False)
   fout->lev = (/plevs/)
-  fout->ens_avg3d = (/ens_avg3d/)
-  fout->ens_stddev3d = (/ens_stddev3d/)
-  fout->ens_avg2d = (/ens_avg2d/)
-  fout->ens_stddev2d = (/ens_stddev2d/)
-  fout->RMSZ = (/array_append_record(Zscore3d,Zscore2d,0)/)
-  fout->global_mean = (/array_append_record(global_mean_3d,global_mean_2d,0)/)
+  
+  if ( nvars3d .gt. 0 ) then ;;; 
+    fout->ens_avg3d = (/ens_avg3d/)
+    fout->ens_stddev3d = (/ens_stddev3d/)
+  end if 
+  if ( nvars2d .gt. 0 ) then ;;; 
+    fout->ens_avg2d = (/ens_avg2d/)
+    fout->ens_stddev2d = (/ens_stddev2d/)
+  end if 
+
+  if ( nvars2d .gt. 0 .and. nvars3d .gt. 0 ) then ;;; 
+    fout->RMSZ = (/array_append_record(Zscore3d,Zscore2d,0)/)
+    fout->global_mean = (/array_append_record(global_mean_3d,global_mean_2d,0)/)
+  else if(nvars2d .gt. 0) then
+    fout->RMSZ = (/Zscore2d/)
+    fout->global_mean = (/global_mean_2d/)
+  else if(nvars3d .gt. 0) then
+    fout->RMSZ = (/Zscore3d/)
+    fout->global_mean = (/global_mean_3d/)
+  end if 
+  end if 
+  end if 
+  
   i = 0
   do v=0,nvars3d-1
     str_var = stringtochar(var_name3d(v))

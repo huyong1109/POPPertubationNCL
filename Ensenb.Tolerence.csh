@@ -12,7 +12,8 @@ setenv OCASE $CASEROOT/$CASE_PFX
 
 
 
-foreach tol (10 11 12 14 16) #91
+#foreach tol (10 11 12 14 16) #91
+foreach tol (10_5 9_5 9 )
 
   set CASE1_NAME=$CASE_PFX.tol.$tol
   set CASE1=$CASEROOT/$CASE1_NAME
@@ -40,11 +41,11 @@ foreach tol (10 11 12 14 16) #91
   # Change pertlim in clone
   
   echo "maxiterations = 5000"   >> user_nl_pop2
-  echo "convergencecriterion = 1.0e-$tol"   >> user_nl_pop2
+  #echo "convergencecriterion = 1.0e-$tol"   >> user_nl_pop2
   ./preview_namelists
   
   # Adjust walltime, account number and ptile in clone
-  cp ~/1001-01-01-00000/* $CASE1/run
+  cp $WORK/1001-01-01-00000/* $CASE1/run
   
   #CHECK RUN
   sed -i "s/ 4:00/ 6:00/g" $CASE1/*.run
@@ -52,6 +53,6 @@ foreach tol (10 11 12 14 16) #91
   sed -i "s/ptile=15/ptile=16/g" $CASE1/*.run
   
   # Only submit the cloned case if --nosubmit is off
-  ./$CASE1_NAME.submit
+  #./$CASE1_NAME.submit
 end
     

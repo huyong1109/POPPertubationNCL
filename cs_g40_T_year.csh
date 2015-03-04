@@ -4,7 +4,7 @@ setenv GSCRATCH /glade/scratch/huyong
 
 setenv MYRUNS $GSCRATCH
 
-setenv CASE1 $MYRUNS/perturb.g40.T.year.csi
+setenv CASE1 $MYRUNS/g40.pT.year
 
 cd $CCSMROOT/scripts
 ./create_newcase -mach yellowstone -res ne30_g16_rx1 -compset G_NORMAL_YEAR -case $CASE1
@@ -43,7 +43,7 @@ source $CASE1/Tools/ccsm_getenv
 cp ~/POPPertubationNCL/CHANGES/CsiDiagPerturb_T/* $CASE1/SourceMods/src.pop2/
 
 echo "init_ts_perturb = 0.0"   >> user_nl_pop2
-echo "solverchoice = 'csi'"   >> user_nl_pop2
+#echo "solverchoice = 'csi'"   >> user_nl_pop2
 
 ./preview_namelists
 
@@ -51,13 +51,13 @@ $CASE1/*.build
 
 #CHECK IF THE LOG FILE EXISTS
 #ls $LOGDIR
-cp ~/1001-01-01-00000/* $CASE1/run
+cp $WORK/1001-01-01-00000/* $CASE1/run
 
 #CHECK RUN
-sed -i "s/ 4:00/ 6:00/g" $CASE1/*.run
+#sed -i "s/ 4:00/ 6:00/g" $CASE1/*.run
 #sed -i "s/ regular/ premium/g" $CASE1/*.run
-sed -i "s/ P00000000/ P07010002/g" $CASE1/*.run
-sed -i "s/ptile=15/ptile=16/g" $CASE1/*.run
+sed -i "s/ P00000000/ P93300012/g" $CASE1/*.run
+#sed -i "s/ptile=15/ptile=16/g" $CASE1/*.run
 
-#bsub < $CASE1/*.run
+bsub < $CASE1/*.run
 
