@@ -69,6 +69,7 @@ end do
 ; a mulidimensional array
 ;************************************************
 
+ asciiwrite("TEMP_tol_3year_RMSE.ascii",data(2,0,:,:))
 month = ispan(1, nmon, 1)
 month@units = "month"
 printVarSummary(month)
@@ -88,7 +89,7 @@ do ivar = 0, nvars-1
 print(XT)
 print(funs)
 print((/XT(ivar)+"_"+funs(ifun)/))
-wk_type = "png"
+wk_type = "x11"
 wk_type@wkWidth = 2500
 wk_type@wkHeight = 2500
 wks   = gsn_open_wks (wk_type,XT(ivar)+"_"+funs(ifun))                  ; open workstation

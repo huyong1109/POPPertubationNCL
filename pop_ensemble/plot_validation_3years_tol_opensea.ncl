@@ -38,11 +38,14 @@ y = new((/nvars,npert+2,nyear*ntime/),"float")
   end do
   end do
   ;;; special case for SSH
-
   ;print(y)
 ;************************************************
 ; plotting Global Mean
 ;************************************************
+
+  asciiwrite("TEMP_tol_40ens_3year_RMSZ.ascii",y(2,:,:))
+
+
 do i = 0, nvars-1
 
 ;************************************************

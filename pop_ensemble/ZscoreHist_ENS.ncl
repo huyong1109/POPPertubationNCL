@@ -87,5 +87,5 @@ begin
 
     end do
   end do
-  asciiwrite("ZcoreHist_ENS_VDC.ascii",Zpdf)
+  asciiwrite("ZscoreHist_ENS_VDC.ascii",Zpdf)
 end

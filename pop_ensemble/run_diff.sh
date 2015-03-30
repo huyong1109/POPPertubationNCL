@@ -35,9 +35,9 @@
 
 
 #### ------ for TOL : -10 ~ -16------ ####
-foreach pert (10 11 12 14 16)
+foreach pert (year.tol.10 year.tol.11 year.tol.12 year year.tol.14 year.csi)
 
 #### ------ for T -14 perturbation ------ ####
-./create_diff.sh  -out_file $WORK/NCOUT/rmse_TOL_$pert.nc -pop_out $SCR/archive/perturb.g40.T.year.tol.$pert -pop_out1 $SCR/archive/perturb.g40.T.year.np/  -casename perturb.g40.T.year.tol.$pert -casename1 perturb.g40.T.year.np  -n 12 -defpert diffsuff.in -defvar defvar.in -month -verbose 
+./create_diff.sh  -out_file $WORK/NCOUT/rmse_tol16_opensea/rmse_TOL_$pert.nc -pop_out $SCR/archive/perturb.g40.T.$pert -pop_out1 $SCR/archive/perturb.g40.T.year.tol.16/  -casename perturb.g40.T.$pert -casename1 perturb.g40.T.year.tol.16  -n 36 -defpert diffsuff.in -defvar defvar.in -month -verbose  &
 
 end

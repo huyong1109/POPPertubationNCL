@@ -64,8 +64,12 @@ if [ -z "$ENS_FILE" ]; then
 fi
 
 ThisDir=$( cd `dirname $0`; pwd )
-#NCLSCRIPT=${ThisDir}/test_run_against_ensemble.ncl
-NCLSCRIPT=${ThisDir}/test_run_against_ensemble_region.ncl
+### This is for global case and opeansea
+NCLSCRIPT=${ThisDir}/test_run_against_ensemble.ncl
+
+### This is for  regional and seas cases
+#NCLSCRIPT=${ThisDir}/test_run_against_ensemble_region.ncl
+
 echo $NCLSCRIPT
 if [ ! -e $NCLSCRIPT ]; then
   echo "ERROR: can not find test_run_against_ensemble.ncl file!"

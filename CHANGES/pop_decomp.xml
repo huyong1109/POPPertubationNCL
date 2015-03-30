@@ -58,6 +58,20 @@
     <decomptype>cartesian</decomptype>
   </decomp>
 
+ <decomp nproc="468" res="tx0.1v2" >
+    <maxblocks >4</maxblocks>
+    <bsize_x   >72</bsize_x>
+    <bsize_y   >48</bsize_y>
+    <decomptype>spacecurve</decomptype>
+  </decomp
+
+<decomp nproc="470" res="tx0.1v2" >
+    <maxblocks >4</maxblocks>
+    <bsize_x   >72</bsize_x>
+    <bsize_y   >48</bsize_y>
+    <decomptype>spacecurve</decomptype>
+  </decomp>
+
   <decomp nproc="512" res="tx0.1v2" >
     <maxblocks >4</maxblocks>
     <bsize_x   >72</bsize_x>
@@ -86,7 +100,21 @@
     <decomptype>spacecurve</decomptype>
   </decomp>
 
-  <decomp nproc="1224" res="tx0.1v2" >
+ <decomp nproc="1224" res="tx0.1v2" >
+    <maxblocks >4</maxblocks>
+    <bsize_x   >45</bsize_x>
+    <bsize_y   >30</bsize_y>
+    <decomptype>spacecurve</decomptype>
+  </decomp>
+
+  <decomp nproc="1200" res="tx0.1v2" >
+    <maxblocks >4</maxblocks>
+    <bsize_x   >45</bsize_x>
+    <bsize_y   >30</bsize_y>
+    <decomptype>spacecurve</decomptype>
+  </decomp>
+
+  <decomp nproc="1142" res="tx0.1v2" >
     <maxblocks >4</maxblocks>
     <bsize_x   >45</bsize_x>
     <bsize_y   >30</bsize_y>
@@ -163,6 +191,15 @@
     <decomptype>spacecurve</decomptype>
   </decomp>
 
+
+<decomp nproc="2700" res="tx0.1v2" >
+    <maxblocks >1</maxblocks>
+    <bsize_x   >60</bsize_x>
+    <bsize_y   >40</bsize_y>
+    <decomptype>spacecurve</decomptype>
+  </decomp>
+
+
   <decomp nproc="3136" res="tx0.1v2" >
     <maxblocks >1</maxblocks>
     <bsize_x   >40</bsize_x>
@@ -204,7 +241,15 @@
      <bsize_y   >32</bsize_y>
      <decomptype>spacecurve</decomptype>
   </decomp>
-                                                
+                        
+<decomp nproc="4220" res="tx0.1v2" >
+     <maxblocks >1</maxblocks>
+     <bsize_x   >48</bsize_x>
+     <bsize_y   >32</bsize_y>
+     <decomptype>spacecurve</decomptype>
+  </decomp>
+                        
+                        
   <decomp nproc="4564" res="tx0.1v2" >
      <maxblocks >1</maxblocks>
      <bsize_x   >45</bsize_x>
@@ -217,7 +262,74 @@
      <bsize_x   >20</bsize_x>
      <bsize_y   >50</bsize_y>
      <decomptype>spacecurve</decomptype>
+   </decomp>
+
+  <decomp nproc="7008" res="tx0.1v2" >
+     <maxblocks >1</maxblocks>
+     <bsize_x   >36</bsize_x>
+     <bsize_y   >24</bsize_y>
+     <decomptype>spacecurve</decomptype>
+   </decomp>
+
+
+<decomp nproc="7500" res="tx0.1v2" >
+     <maxblocks >1</maxblocks>
+     <bsize_x   >36</bsize_x>
+     <bsize_y   >24</bsize_y>
+     <decomptype>spacecurve</decomptype>
+   </decomp>
+
+
+  <decomp nproc="9128" res="tx0.1v2" >
+     <maxblocks >1</maxblocks>
+     <bsize_x   >24</bsize_x>
+     <bsize_y   >30</bsize_y>
+     <decomptype>spacecurve</decomptype>
+   </decomp>
+
+  <decomp nproc="9448" res="tx0.1v2" >
+     <maxblocks >1</maxblocks>
+     <bsize_x   >30</bsize_x>
+     <bsize_y   >20</bsize_y>
+     <decomptype>spacecurve</decomptype>
+   </decomp>
+
+<decomp nproc="10800" res="tx0.1v2" >
+     <maxblocks >1</maxblocks>
+     <bsize_x   >30</bsize_x>
+     <bsize_y   >20</bsize_y>
+     <decomptype>spacecurve</decomptype>
+   </decomp>
+
+  <decomp nproc="12330" res="tx0.1v2" >
+     <maxblocks >1</maxblocks>
+     <bsize_x   >24</bsize_x>
+     <bsize_y   >20</bsize_y>
+     <decomptype>spacecurve</decomptype>
   </decomp>
+
+  <decomp nproc="14732" res="tx0.1v2" >
+     <maxblocks >1</maxblocks>
+     <bsize_x   >25</bsize_x>
+     <bsize_y   >16</bsize_y>
+     <decomptype>spacecurve</decomptype>
+   </decomp>
+  
+
+<decomp nproc="16875" res="tx0.1v2" >
+     <maxblocks >1</maxblocks>
+     <bsize_x   >24</bsize_x>
+     <bsize_y   >16</bsize_y>
+     <decomptype>spacecurve</decomptype>
+   </decomp>
+  
+
+  <decomp nproc="19458" res="tx0.1v2" >
+     <maxblocks >1</maxblocks>
+     <bsize_x   >20</bsize_x>
+     <bsize_y   >15</bsize_y>
+     <decomptype>spacecurve</decomptype>
+   </decomp>
 
   <decomp nproc="19460" res="tx0.1v2"  nthrd="1">
     <maxblocks >1</maxblocks> 

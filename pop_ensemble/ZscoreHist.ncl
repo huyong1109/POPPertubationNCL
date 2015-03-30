@@ -71,8 +71,10 @@ begin
         ;;; read 2D variables
         print("Variable: SSH")
         data2d =  cntf->SSH(0,:,:)
-        ;;; Zscore
+        ;;; Pointwise Zscore
         data2d = abs((data2d-ensavg2d(:,:))/where(std2d(:,:) .le. 1.0e-12, std2d@_FillValue, std2d(:,:)))
+        
+        ;;; Probability Distribution Function
         zpdfx := dble2flt(pdfx(data2d,npdf,pres))
         print(zpdfx@bin_center + " " +zpdfx)
         Zpdf(ncase,indmon,4,:) = zpdfx
