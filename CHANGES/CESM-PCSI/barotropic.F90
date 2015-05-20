@@ -247,10 +247,6 @@
 
       end select
 
-      if (POP_myTask == POP_masterTask) then
-        write(*,'(a8,4e12.5)') 'Diagonal', &
-            alpha,c2,dtp,diagonalCorrection(20,20) 
-      endif
       call POP_SolversDiagonal(diagonalCorrection, iblock, errorCode)
 
     end do ! iblock
