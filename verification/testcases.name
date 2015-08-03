@@ -1,0 +1,17 @@
+orig
+core48
+core192
+core384
+tol5.0e-9
+tol1.0e-9
+tol5.0e-10
+tol1.0e-10
+tol1.0e-11
+tol1.0e-12
+tol1.0e-14
+tol1.0e-15
+tol1.0e-16
+cvtd20000.0
+cvtd50000.0
+cvtd100000.0
+tadvct=lw_lim
