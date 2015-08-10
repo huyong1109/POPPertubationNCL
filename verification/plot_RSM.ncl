@@ -10,13 +10,13 @@ begin
   perts= asciiread("testcases.name",-1, "string")
   print((/perts/))
 
-  ;caseid = (/0, 3, 15, 16 /)
-  ;pert=(/ "Orginal (Proc=96)","Proc=384","Convectdiff*10","Tadvect=lw_lim"/)
-  ;fix = "param"
+  caseid = (/0, 3, 15, 16 /)
+  pert=(/ "original (cores=96)","cores=384","convect_dif*10","t_advect=lw_lim"/)
+  fix = "param"
 
-  caseid = (/0, 12, 7, 4 /)
-  pert=(/ "Orginal (Tol=1.0e-13)","Tol=1.0e-16","Tol=1.0e-10","Tol=5.0e-9"/)
-  fix = "tol"
+  ;caseid = (/0, 12, 7, 4 /)
+  ;pert=(/ "original (tol=1.0e-13)","tol=1.0e-16","tol=1.0e-10","tol=5.0e-9"/)
+  ;fix = "tol"
 
   nperts = dimsizes(perts)
   npert = dimsizes(pert)
@@ -49,6 +49,7 @@ begin
   
   do v = 0, nvar-1
     filename = "RSM-"+vars(v)+"-"+fix
+    wk_type = "x11"  ;;; change x11 and png order to get the type you want
     wk_type = "png"
     wk_type@wkWidth = 2500
     wk_type@wkHeight = 2500
@@ -80,13 +81,13 @@ begin
     ;res@trYMaxF = 12000
     do i = 0, npert-1
       res@tiXAxisString     = "Month"
-      res@tiYAxisString     = "Zscore"
+      res@tiYAxisString     = "Z-score"
       res@tiMainString      = pert(i)
       plot(i) = gsn_csm_contour(wks,zpdf(i,v,:,:),res)     ; create plot
     end do
     resP = True
     ;resP@txString = var+" Zscore distribution  of case: "+case
-    resP@txString = "Zscore CDF (%) of " +vars(v)
+    resP@txString = vars(v)
     gsn_panel(wks,plot,(/2,2/),resP)
     system("convert -trim "+filename+".png " +filename+".png")
   

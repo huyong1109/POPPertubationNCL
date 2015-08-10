@@ -57,15 +57,15 @@ begin
     print(outfile)
     wk_type = "x11"
     wk_type = "png"
-    ;wk_type@wkWidth = 2500
-    ;wk_type@wkHeight= 2500
+    wk_type@wkWidth = 2500
+    wk_type@wkHeight= 2500
     wks   = gsn_open_wks (wk_type,outfile)
     ;gsn_define_colormap(wks, "GMT_red2green")
     res=True
     gsn_define_colormap(wks, "sunshine_9lev")
     ;gsn_define_colormap(wks, "precip2_17lev")
     ;gsn_define_colormap(wks, "prcp_2")
-    res@tiMainString         = "STD distribution of SST on the "+mon(i)+"th month"
+    res@tiMainString         = "Standard Deviation of SST (Month "+mon(i)+")"
   
     res@cnFillOn             = True       ; turn on color fill
     res@cnLineLabelsOn       = False      ; turns off contour line labels
